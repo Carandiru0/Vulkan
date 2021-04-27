@@ -32,5 +32,6 @@ CMakeScripts
 cmake_install.cmake
 cmake_uninstall.cmake
 
-# Specific Directories
+# Specific Directories/Files
 vulkancapsviewer
+desktop.ini
