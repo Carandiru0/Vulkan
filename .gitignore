@@ -1,5 +1,10 @@
-# Prerequisites
+# Other project files
 *.d
+*.db
+*.suo
+*.log
+*.tlog
+*.lastbuildstate
 
 # Compiled Object files
 *.slo
@@ -10,23 +15,22 @@
 # Precompiled Headers
 *.gch
 *.pch
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
+*.ipch
 
 # Compiled Static libraries
-*.lai
-*.la
-*.a
 *.lib
 
-# Executables
+# Compiled
 *.exe
-*.out
-*.app
+*.dll
+
+# CMake files
+Makefile
+CMakeCache.txt
+CMakeFiles
+CMakeScripts
+cmake_install.cmake
+cmake_uninstall.cmake
+
+# Specific Directories
+vulkancapsviewer
