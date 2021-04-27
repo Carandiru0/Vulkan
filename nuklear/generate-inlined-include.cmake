@@ -1,0 +1,5 @@
+file(READ "X:/Vulkan/nuklear/nuklearshaders/nuklear.vert.h" NUKLEAR_VERT_H)
+file(READ "X:/Vulkan/nuklear/nuklearshaders/nuklear.frag.h" NUKLEAR_FRAG_H)
+set(NUKLEAR_SHADERS_START "INCLUDES INLINED\n#if 0")
+string(CONCAT NUKLEAR_SHADERS_END "\n#endif\n" "${NUKLEAR_VERT_H}" "${NUKLEAR_FRAG_H}")
+configure_file("X:/Vulkan/nuklear/nuklear-glfw-vulkan.h" "X:/Vulkan/nuklear/release/nuklear-glfw-vulkan.h")

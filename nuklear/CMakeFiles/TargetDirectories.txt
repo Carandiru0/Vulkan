@@ -1,0 +1,7 @@
+X:/Vulkan/nuklear/CMakeFiles/release_header.dir
+X:/Vulkan/nuklear/CMakeFiles/demo.dir
+X:/Vulkan/nuklear/CMakeFiles/release.dir
+X:/Vulkan/nuklear/CMakeFiles/ALL_BUILD.dir
+X:/Vulkan/nuklear/CMakeFiles/ZERO_CHECK.dir
+X:/Vulkan/nuklear/glfw-3.2.1/CMakeFiles/ALL_BUILD.dir
+X:/Vulkan/nuklear/glfw-3.2.1/src/CMakeFiles/glfw.dir

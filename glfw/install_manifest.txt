@@ -1,0 +1,6 @@
+X:/Vulkan/glfw/lib/cmake/glfw3/glfw3Config.cmake
+X:/Vulkan/glfw/lib/cmake/glfw3/glfw3ConfigVersion.cmake
+X:/Vulkan/glfw/lib/cmake/glfw3/glfw3Targets.cmake
+X:/Vulkan/glfw/lib/cmake/glfw3/glfw3Targets-release.cmake
+X:/Vulkan/glfw/lib/pkgconfig/glfw3.pc
+X:/Vulkan/glfw/lib/glfw3.lib

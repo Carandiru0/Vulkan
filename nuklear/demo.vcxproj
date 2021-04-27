@@ -1,0 +1,804 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="MinSizeRel|x64">
+      <Configuration>MinSizeRel</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="RelWithDebInfo|x64">
+      <Configuration>RelWithDebInfo</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{B51D82C1-7579-3F82-B527-8995D68809AF}</ProjectGuid>
+    <WindowsTargetPlatformVersion>10.0.17134.0</WindowsTargetPlatformVersion>
+    <Keyword>Win32Proj</Keyword>
+    <Platform>x64</Platform>
+    <ProjectName>demo</ProjectName>
+    <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v141</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v141</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v141</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v141</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">X:\Vulkan\nuklear\Debug\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">demo.dir\Debug\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">demo</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</GenerateManifest>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">X:\Vulkan\nuklear\Release\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">demo.dir\Release\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">demo</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</GenerateManifest>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">X:\Vulkan\nuklear\MinSizeRel\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">demo.dir\MinSizeRel\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">demo</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">true</GenerateManifest>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">X:\Vulkan\nuklear\RelWithDebInfo\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">demo.dir\RelWithDebInfo\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">demo</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">true</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">true</GenerateManifest>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>X:\Vulkan\nuklear\nuklear;X:\Vulkan\nuklear\glfw-3.2.1\include;X:\VulkanSDK\Include;X:\Vulkan\nuklear;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AssemblerListingLocation>Debug/</AssemblerListingLocation>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <CompileAs>CompileAsCpp</CompileAs>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
+      <Optimization>Disabled</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;CMAKE_INTDIR="Debug";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;CMAKE_INTDIR=\"Debug\";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>X:\Vulkan\nuklear\nuklear;X:\Vulkan\nuklear\glfw-3.2.1\include;X:\VulkanSDK\Include;X:\Vulkan\nuklear;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>X:\Vulkan\nuklear\nuklear;X:\Vulkan\nuklear\glfw-3.2.1\include;X:\VulkanSDK\Include;X:\Vulkan\nuklear;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Link>
+      <AdditionalDependencies>glfw-3.2.1\src\Debug\glfw3.lib;X:\VulkanSDK\Lib\vulkan-1.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <GenerateDebugInformation>Debug</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImportLibrary>X:/Vulkan/nuklear/Debug/demo.lib</ImportLibrary>
+      <ProgramDataBaseFile>X:/Vulkan/nuklear/Debug/demo.pdb</ProgramDataBaseFile>
+      <SubSystem>Console</SubSystem>
+      <Version>
+      </Version>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>X:\Vulkan\nuklear\nuklear;X:\Vulkan\nuklear\glfw-3.2.1\include;X:\VulkanSDK\Include;X:\Vulkan\nuklear;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AssemblerListingLocation>Release/</AssemblerListingLocation>
+      <CompileAs>CompileAsCpp</CompileAs>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;CMAKE_INTDIR="Release";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <OmitFramePointers>true</OmitFramePointers>
+      <EnableFiberSafeOptimizations>true</EnableFiberSafeOptimizations>
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <FloatingPointExceptions>false</FloatingPointExceptions>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;CMAKE_INTDIR=\"Release\";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>X:\Vulkan\nuklear\nuklear;X:\Vulkan\nuklear\glfw-3.2.1\include;X:\VulkanSDK\Include;X:\Vulkan\nuklear;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>X:\Vulkan\nuklear\nuklear;X:\Vulkan\nuklear\glfw-3.2.1\include;X:\VulkanSDK\Include;X:\Vulkan\nuklear;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Link>
+      <AdditionalDependencies>glfw-3.2.1\src\Release\glfw3.lib;X:\VulkanSDK\Lib\vulkan-1.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <GenerateDebugInformation>No</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImportLibrary>X:/Vulkan/nuklear/Release/demo.lib</ImportLibrary>
+      <ProgramDataBaseFile>X:/Vulkan/nuklear/Release/demo.pdb</ProgramDataBaseFile>
+      <SubSystem>Console</SubSystem>
+      <Version>
+      </Version>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>X:\Vulkan\nuklear\nuklear;X:\Vulkan\nuklear\glfw-3.2.1\include;X:\VulkanSDK\Include;X:\Vulkan\nuklear;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AssemblerListingLocation>MinSizeRel/</AssemblerListingLocation>
+      <CompileAs>CompileAsCpp</CompileAs>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <Optimization>MinSpace</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;CMAKE_INTDIR="MinSizeRel";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;CMAKE_INTDIR=\"MinSizeRel\";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>X:\Vulkan\nuklear\nuklear;X:\Vulkan\nuklear\glfw-3.2.1\include;X:\VulkanSDK\Include;X:\Vulkan\nuklear;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>X:\Vulkan\nuklear\nuklear;X:\Vulkan\nuklear\glfw-3.2.1\include;X:\VulkanSDK\Include;X:\Vulkan\nuklear;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Link>
+      <AdditionalDependencies>glfw-3.2.1\src\MinSizeRel\glfw3.lib;X:\VulkanSDK\Lib\vulkan-1.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <GenerateDebugInformation>No</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImportLibrary>X:/Vulkan/nuklear/MinSizeRel/demo.lib</ImportLibrary>
+      <ProgramDataBaseFile>X:/Vulkan/nuklear/MinSizeRel/demo.pdb</ProgramDataBaseFile>
+      <SubSystem>Console</SubSystem>
+      <Version>
+      </Version>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>X:\Vulkan\nuklear\nuklear;X:\Vulkan\nuklear\glfw-3.2.1\include;X:\VulkanSDK\Include;X:\Vulkan\nuklear;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AssemblerListingLocation>RelWithDebInfo/</AssemblerListingLocation>
+      <CompileAs>CompileAsCpp</CompileAs>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;CMAKE_INTDIR="RelWithDebInfo";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;CMAKE_INTDIR=\"RelWithDebInfo\";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>X:\Vulkan\nuklear\nuklear;X:\Vulkan\nuklear\glfw-3.2.1\include;X:\VulkanSDK\Include;X:\Vulkan\nuklear;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>X:\Vulkan\nuklear\nuklear;X:\Vulkan\nuklear\glfw-3.2.1\include;X:\VulkanSDK\Include;X:\Vulkan\nuklear;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Link>
+      <AdditionalDependencies>glfw-3.2.1\src\RelWithDebInfo\glfw3.lib;X:\VulkanSDK\Lib\vulkan-1.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <GenerateDebugInformation>Debug</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImportLibrary>X:/Vulkan/nuklear/RelWithDebInfo/demo.lib</ImportLibrary>
+      <ProgramDataBaseFile>X:/Vulkan/nuklear/RelWithDebInfo/demo.pdb</ProgramDataBaseFile>
+      <SubSystem>Console</SubSystem>
+      <Version>
+      </Version>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeLists.txt">
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Building Custom Rule X:/Vulkan/nuklear/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+D:\CMake\bin\cmake.exe -HX:/Vulkan/nuklear -BX:/Vulkan/nuklear --check-stamp-file X:/Vulkan/nuklear/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">X:/Vulkan/nuklear/CMakeLists.txt;X:\Vulkan\nuklear\CMakeLists.txt;X:\Vulkan\nuklear\CMakeFiles\3.9.0-rc3\CMakeSystem.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeSystemSpecificInitialize.cmake;X:\Vulkan\nuklear\CMakeFiles\3.9.0-rc3\CMakeCCompiler.cmake;X:\Vulkan\nuklear\CMakeFiles\3.9.0-rc3\CMakeCXXCompiler.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeSystemSpecificInformation.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeGenericSystem.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\Windows.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\WindowsPaths.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeCInformation.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeLanguageInformation.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\Windows-MSVC-C.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\Windows-MSVC.cmake;X:\Vulkan\nuklear\CMakeFiles\3.9.0-rc3\CMakeRCCompiler.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeRCInformation.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeCommonLanguageInclude.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeCXXInformation.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeLanguageInformation.cmake;D:\CMake\share\cmake-3.9\Modules\Compiler\MSVC-CXX.cmake;D:\CMake\share\cmake-3.9\Modules\Compiler\CMakeCommonCompilerMacros.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\Windows-MSVC-CXX.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\Windows-MSVC.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeCommonLanguageInclude.cmake;X:\Vulkan\nuklear\generate-inlined-include.cmake.in;X:\Vulkan\nuklear\CMakeLists.txt;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">X:\Vulkan\nuklear\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Building Custom Rule X:/Vulkan/nuklear/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+D:\CMake\bin\cmake.exe -HX:/Vulkan/nuklear -BX:/Vulkan/nuklear --check-stamp-file X:/Vulkan/nuklear/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">X:/Vulkan/nuklear/CMakeLists.txt;X:\Vulkan\nuklear\CMakeLists.txt;X:\Vulkan\nuklear\CMakeFiles\3.9.0-rc3\CMakeSystem.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeSystemSpecificInitialize.cmake;X:\Vulkan\nuklear\CMakeFiles\3.9.0-rc3\CMakeCCompiler.cmake;X:\Vulkan\nuklear\CMakeFiles\3.9.0-rc3\CMakeCXXCompiler.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeSystemSpecificInformation.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeGenericSystem.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\Windows.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\WindowsPaths.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeCInformation.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeLanguageInformation.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\Windows-MSVC-C.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\Windows-MSVC.cmake;X:\Vulkan\nuklear\CMakeFiles\3.9.0-rc3\CMakeRCCompiler.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeRCInformation.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeCommonLanguageInclude.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeCXXInformation.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeLanguageInformation.cmake;D:\CMake\share\cmake-3.9\Modules\Compiler\MSVC-CXX.cmake;D:\CMake\share\cmake-3.9\Modules\Compiler\CMakeCommonCompilerMacros.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\Windows-MSVC-CXX.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\Windows-MSVC.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeCommonLanguageInclude.cmake;X:\Vulkan\nuklear\generate-inlined-include.cmake.in;X:\Vulkan\nuklear\CMakeLists.txt;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">X:\Vulkan\nuklear\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Building Custom Rule X:/Vulkan/nuklear/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+D:\CMake\bin\cmake.exe -HX:/Vulkan/nuklear -BX:/Vulkan/nuklear --check-stamp-file X:/Vulkan/nuklear/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">X:/Vulkan/nuklear/CMakeLists.txt;X:\Vulkan\nuklear\CMakeLists.txt;X:\Vulkan\nuklear\CMakeFiles\3.9.0-rc3\CMakeSystem.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeSystemSpecificInitialize.cmake;X:\Vulkan\nuklear\CMakeFiles\3.9.0-rc3\CMakeCCompiler.cmake;X:\Vulkan\nuklear\CMakeFiles\3.9.0-rc3\CMakeCXXCompiler.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeSystemSpecificInformation.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeGenericSystem.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\Windows.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\WindowsPaths.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeCInformation.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeLanguageInformation.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\Windows-MSVC-C.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\Windows-MSVC.cmake;X:\Vulkan\nuklear\CMakeFiles\3.9.0-rc3\CMakeRCCompiler.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeRCInformation.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeCommonLanguageInclude.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeCXXInformation.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeLanguageInformation.cmake;D:\CMake\share\cmake-3.9\Modules\Compiler\MSVC-CXX.cmake;D:\CMake\share\cmake-3.9\Modules\Compiler\CMakeCommonCompilerMacros.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\Windows-MSVC-CXX.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\Windows-MSVC.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeCommonLanguageInclude.cmake;X:\Vulkan\nuklear\generate-inlined-include.cmake.in;X:\Vulkan\nuklear\CMakeLists.txt;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">X:\Vulkan\nuklear\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Building Custom Rule X:/Vulkan/nuklear/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+D:\CMake\bin\cmake.exe -HX:/Vulkan/nuklear -BX:/Vulkan/nuklear --check-stamp-file X:/Vulkan/nuklear/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">X:/Vulkan/nuklear/CMakeLists.txt;X:\Vulkan\nuklear\CMakeLists.txt;X:\Vulkan\nuklear\CMakeFiles\3.9.0-rc3\CMakeSystem.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeSystemSpecificInitialize.cmake;X:\Vulkan\nuklear\CMakeFiles\3.9.0-rc3\CMakeCCompiler.cmake;X:\Vulkan\nuklear\CMakeFiles\3.9.0-rc3\CMakeCXXCompiler.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeSystemSpecificInformation.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeGenericSystem.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\Windows.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\WindowsPaths.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeCInformation.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeLanguageInformation.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\Windows-MSVC-C.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\Windows-MSVC.cmake;X:\Vulkan\nuklear\CMakeFiles\3.9.0-rc3\CMakeRCCompiler.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeRCInformation.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeCommonLanguageInclude.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeCXXInformation.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeLanguageInformation.cmake;D:\CMake\share\cmake-3.9\Modules\Compiler\MSVC-CXX.cmake;D:\CMake\share\cmake-3.9\Modules\Compiler\CMakeCommonCompilerMacros.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\Windows-MSVC-CXX.cmake;D:\CMake\share\cmake-3.9\Modules\Platform\Windows-MSVC.cmake;D:\CMake\share\cmake-3.9\Modules\CMakeCommonLanguageInclude.cmake;X:\Vulkan\nuklear\generate-inlined-include.cmake.in;X:\Vulkan\nuklear\CMakeLists.txt;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">X:\Vulkan\nuklear\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeFiles\6edbe054a129f133696873ec914df266\demo.frag.spv.rule">
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Generating demoshaders/demo.frag.spv</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+X:\VulkanSDK\Bin\glslangValidator.exe -V X:/Vulkan/nuklear/demoshaders/demo.frag -o X:/Vulkan/nuklear/demoshaders/demo.frag.spv
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">X:/Vulkan/nuklear/CMakeFiles/6edbe054a129f133696873ec914df266/demo.frag.spv.rule;X:\Vulkan\nuklear\demoshaders\demo.frag;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">X:\Vulkan\nuklear\demoshaders\demo.frag.spv</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Generating demoshaders/demo.frag.spv</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+X:\VulkanSDK\Bin\glslangValidator.exe -V X:/Vulkan/nuklear/demoshaders/demo.frag -o X:/Vulkan/nuklear/demoshaders/demo.frag.spv
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">X:/Vulkan/nuklear/CMakeFiles/6edbe054a129f133696873ec914df266/demo.frag.spv.rule;X:\Vulkan\nuklear\demoshaders\demo.frag;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">X:\Vulkan\nuklear\demoshaders\demo.frag.spv</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Generating demoshaders/demo.frag.spv</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+X:\VulkanSDK\Bin\glslangValidator.exe -V X:/Vulkan/nuklear/demoshaders/demo.frag -o X:/Vulkan/nuklear/demoshaders/demo.frag.spv
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">X:/Vulkan/nuklear/CMakeFiles/6edbe054a129f133696873ec914df266/demo.frag.spv.rule;X:\Vulkan\nuklear\demoshaders\demo.frag;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">X:\Vulkan\nuklear\demoshaders\demo.frag.spv</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Generating demoshaders/demo.frag.spv</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+X:\VulkanSDK\Bin\glslangValidator.exe -V X:/Vulkan/nuklear/demoshaders/demo.frag -o X:/Vulkan/nuklear/demoshaders/demo.frag.spv
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">X:/Vulkan/nuklear/CMakeFiles/6edbe054a129f133696873ec914df266/demo.frag.spv.rule;X:\Vulkan\nuklear\demoshaders\demo.frag;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">X:\Vulkan\nuklear\demoshaders\demo.frag.spv</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeFiles\6edbe054a129f133696873ec914df266\demo.frag.h.rule">
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Generating demoshaders/demo.frag.h</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+"C:\Program Files\Git\usr\bin\xxd.exe" -i demoshaders/demo.frag.spv X:/Vulkan/nuklear/demoshaders/demo.frag.h
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">X:/Vulkan/nuklear/CMakeFiles/6edbe054a129f133696873ec914df266/demo.frag.h.rule;X:\Vulkan\nuklear\demoshaders\demo.frag.spv;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">X:\Vulkan\nuklear\demoshaders\demo.frag.h</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Generating demoshaders/demo.frag.h</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+"C:\Program Files\Git\usr\bin\xxd.exe" -i demoshaders/demo.frag.spv X:/Vulkan/nuklear/demoshaders/demo.frag.h
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">X:/Vulkan/nuklear/CMakeFiles/6edbe054a129f133696873ec914df266/demo.frag.h.rule;X:\Vulkan\nuklear\demoshaders\demo.frag.spv;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">X:\Vulkan\nuklear\demoshaders\demo.frag.h</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Generating demoshaders/demo.frag.h</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+"C:\Program Files\Git\usr\bin\xxd.exe" -i demoshaders/demo.frag.spv X:/Vulkan/nuklear/demoshaders/demo.frag.h
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">X:/Vulkan/nuklear/CMakeFiles/6edbe054a129f133696873ec914df266/demo.frag.h.rule;X:\Vulkan\nuklear\demoshaders\demo.frag.spv;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">X:\Vulkan\nuklear\demoshaders\demo.frag.h</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Generating demoshaders/demo.frag.h</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+"C:\Program Files\Git\usr\bin\xxd.exe" -i demoshaders/demo.frag.spv X:/Vulkan/nuklear/demoshaders/demo.frag.h
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">X:/Vulkan/nuklear/CMakeFiles/6edbe054a129f133696873ec914df266/demo.frag.h.rule;X:\Vulkan\nuklear\demoshaders\demo.frag.spv;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">X:\Vulkan\nuklear\demoshaders\demo.frag.h</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeFiles\6edbe054a129f133696873ec914df266\demo.vert.spv.rule">
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Generating demoshaders/demo.vert.spv</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+X:\VulkanSDK\Bin\glslangValidator.exe -V X:/Vulkan/nuklear/demoshaders/demo.vert -o X:/Vulkan/nuklear/demoshaders/demo.vert.spv
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">X:/Vulkan/nuklear/CMakeFiles/6edbe054a129f133696873ec914df266/demo.vert.spv.rule;X:\Vulkan\nuklear\demoshaders\demo.vert;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">X:\Vulkan\nuklear\demoshaders\demo.vert.spv</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Generating demoshaders/demo.vert.spv</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+X:\VulkanSDK\Bin\glslangValidator.exe -V X:/Vulkan/nuklear/demoshaders/demo.vert -o X:/Vulkan/nuklear/demoshaders/demo.vert.spv
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">X:/Vulkan/nuklear/CMakeFiles/6edbe054a129f133696873ec914df266/demo.vert.spv.rule;X:\Vulkan\nuklear\demoshaders\demo.vert;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">X:\Vulkan\nuklear\demoshaders\demo.vert.spv</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Generating demoshaders/demo.vert.spv</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+X:\VulkanSDK\Bin\glslangValidator.exe -V X:/Vulkan/nuklear/demoshaders/demo.vert -o X:/Vulkan/nuklear/demoshaders/demo.vert.spv
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">X:/Vulkan/nuklear/CMakeFiles/6edbe054a129f133696873ec914df266/demo.vert.spv.rule;X:\Vulkan\nuklear\demoshaders\demo.vert;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">X:\Vulkan\nuklear\demoshaders\demo.vert.spv</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Generating demoshaders/demo.vert.spv</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+X:\VulkanSDK\Bin\glslangValidator.exe -V X:/Vulkan/nuklear/demoshaders/demo.vert -o X:/Vulkan/nuklear/demoshaders/demo.vert.spv
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">X:/Vulkan/nuklear/CMakeFiles/6edbe054a129f133696873ec914df266/demo.vert.spv.rule;X:\Vulkan\nuklear\demoshaders\demo.vert;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">X:\Vulkan\nuklear\demoshaders\demo.vert.spv</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeFiles\6edbe054a129f133696873ec914df266\demo.vert.h.rule">
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Generating demoshaders/demo.vert.h</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+"C:\Program Files\Git\usr\bin\xxd.exe" -i demoshaders/demo.vert.spv X:/Vulkan/nuklear/demoshaders/demo.vert.h
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">X:/Vulkan/nuklear/CMakeFiles/6edbe054a129f133696873ec914df266/demo.vert.h.rule;X:\Vulkan\nuklear\demoshaders\demo.vert.spv;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">X:\Vulkan\nuklear\demoshaders\demo.vert.h</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Generating demoshaders/demo.vert.h</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+"C:\Program Files\Git\usr\bin\xxd.exe" -i demoshaders/demo.vert.spv X:/Vulkan/nuklear/demoshaders/demo.vert.h
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">X:/Vulkan/nuklear/CMakeFiles/6edbe054a129f133696873ec914df266/demo.vert.h.rule;X:\Vulkan\nuklear\demoshaders\demo.vert.spv;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">X:\Vulkan\nuklear\demoshaders\demo.vert.h</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Generating demoshaders/demo.vert.h</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+"C:\Program Files\Git\usr\bin\xxd.exe" -i demoshaders/demo.vert.spv X:/Vulkan/nuklear/demoshaders/demo.vert.h
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">X:/Vulkan/nuklear/CMakeFiles/6edbe054a129f133696873ec914df266/demo.vert.h.rule;X:\Vulkan\nuklear\demoshaders\demo.vert.spv;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">X:\Vulkan\nuklear\demoshaders\demo.vert.h</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Generating demoshaders/demo.vert.h</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+"C:\Program Files\Git\usr\bin\xxd.exe" -i demoshaders/demo.vert.spv X:/Vulkan/nuklear/demoshaders/demo.vert.h
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">X:/Vulkan/nuklear/CMakeFiles/6edbe054a129f133696873ec914df266/demo.vert.h.rule;X:\Vulkan\nuklear\demoshaders\demo.vert.spv;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">X:\Vulkan\nuklear\demoshaders\demo.vert.h</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeFiles\ed398889094b8880dded1983211bd70d\nuklear.frag.spv.rule">
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Generating nuklearshaders/nuklear.frag.spv</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+X:\VulkanSDK\Bin\glslangValidator.exe -V X:/Vulkan/nuklear/nuklearshaders/nuklear.frag -o X:/Vulkan/nuklear/nuklearshaders/nuklear.frag.spv
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">X:/Vulkan/nuklear/CMakeFiles/ed398889094b8880dded1983211bd70d/nuklear.frag.spv.rule;X:\Vulkan\nuklear\nuklearshaders\nuklear.frag;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">X:\Vulkan\nuklear\nuklearshaders\nuklear.frag.spv</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Generating nuklearshaders/nuklear.frag.spv</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+X:\VulkanSDK\Bin\glslangValidator.exe -V X:/Vulkan/nuklear/nuklearshaders/nuklear.frag -o X:/Vulkan/nuklear/nuklearshaders/nuklear.frag.spv
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">X:/Vulkan/nuklear/CMakeFiles/ed398889094b8880dded1983211bd70d/nuklear.frag.spv.rule;X:\Vulkan\nuklear\nuklearshaders\nuklear.frag;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">X:\Vulkan\nuklear\nuklearshaders\nuklear.frag.spv</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Generating nuklearshaders/nuklear.frag.spv</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+X:\VulkanSDK\Bin\glslangValidator.exe -V X:/Vulkan/nuklear/nuklearshaders/nuklear.frag -o X:/Vulkan/nuklear/nuklearshaders/nuklear.frag.spv
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">X:/Vulkan/nuklear/CMakeFiles/ed398889094b8880dded1983211bd70d/nuklear.frag.spv.rule;X:\Vulkan\nuklear\nuklearshaders\nuklear.frag;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">X:\Vulkan\nuklear\nuklearshaders\nuklear.frag.spv</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Generating nuklearshaders/nuklear.frag.spv</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+X:\VulkanSDK\Bin\glslangValidator.exe -V X:/Vulkan/nuklear/nuklearshaders/nuklear.frag -o X:/Vulkan/nuklear/nuklearshaders/nuklear.frag.spv
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">X:/Vulkan/nuklear/CMakeFiles/ed398889094b8880dded1983211bd70d/nuklear.frag.spv.rule;X:\Vulkan\nuklear\nuklearshaders\nuklear.frag;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">X:\Vulkan\nuklear\nuklearshaders\nuklear.frag.spv</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeFiles\ed398889094b8880dded1983211bd70d\nuklear.frag.h.rule">
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Generating nuklearshaders/nuklear.frag.h</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+"C:\Program Files\Git\usr\bin\xxd.exe" -i nuklearshaders/nuklear.frag.spv X:/Vulkan/nuklear/nuklearshaders/nuklear.frag.h
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">X:/Vulkan/nuklear/CMakeFiles/ed398889094b8880dded1983211bd70d/nuklear.frag.h.rule;X:\Vulkan\nuklear\nuklearshaders\nuklear.frag.spv;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">X:\Vulkan\nuklear\nuklearshaders\nuklear.frag.h</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Generating nuklearshaders/nuklear.frag.h</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+"C:\Program Files\Git\usr\bin\xxd.exe" -i nuklearshaders/nuklear.frag.spv X:/Vulkan/nuklear/nuklearshaders/nuklear.frag.h
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">X:/Vulkan/nuklear/CMakeFiles/ed398889094b8880dded1983211bd70d/nuklear.frag.h.rule;X:\Vulkan\nuklear\nuklearshaders\nuklear.frag.spv;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">X:\Vulkan\nuklear\nuklearshaders\nuklear.frag.h</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Generating nuklearshaders/nuklear.frag.h</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+"C:\Program Files\Git\usr\bin\xxd.exe" -i nuklearshaders/nuklear.frag.spv X:/Vulkan/nuklear/nuklearshaders/nuklear.frag.h
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">X:/Vulkan/nuklear/CMakeFiles/ed398889094b8880dded1983211bd70d/nuklear.frag.h.rule;X:\Vulkan\nuklear\nuklearshaders\nuklear.frag.spv;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">X:\Vulkan\nuklear\nuklearshaders\nuklear.frag.h</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Generating nuklearshaders/nuklear.frag.h</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+"C:\Program Files\Git\usr\bin\xxd.exe" -i nuklearshaders/nuklear.frag.spv X:/Vulkan/nuklear/nuklearshaders/nuklear.frag.h
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">X:/Vulkan/nuklear/CMakeFiles/ed398889094b8880dded1983211bd70d/nuklear.frag.h.rule;X:\Vulkan\nuklear\nuklearshaders\nuklear.frag.spv;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">X:\Vulkan\nuklear\nuklearshaders\nuklear.frag.h</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeFiles\ed398889094b8880dded1983211bd70d\nuklear.vert.spv.rule">
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Generating nuklearshaders/nuklear.vert.spv</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+X:\VulkanSDK\Bin\glslangValidator.exe -V X:/Vulkan/nuklear/nuklearshaders/nuklear.vert -o X:/Vulkan/nuklear/nuklearshaders/nuklear.vert.spv
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">X:/Vulkan/nuklear/CMakeFiles/ed398889094b8880dded1983211bd70d/nuklear.vert.spv.rule;X:\Vulkan\nuklear\nuklearshaders\nuklear.vert;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">X:\Vulkan\nuklear\nuklearshaders\nuklear.vert.spv</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Generating nuklearshaders/nuklear.vert.spv</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+X:\VulkanSDK\Bin\glslangValidator.exe -V X:/Vulkan/nuklear/nuklearshaders/nuklear.vert -o X:/Vulkan/nuklear/nuklearshaders/nuklear.vert.spv
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">X:/Vulkan/nuklear/CMakeFiles/ed398889094b8880dded1983211bd70d/nuklear.vert.spv.rule;X:\Vulkan\nuklear\nuklearshaders\nuklear.vert;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">X:\Vulkan\nuklear\nuklearshaders\nuklear.vert.spv</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Generating nuklearshaders/nuklear.vert.spv</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+X:\VulkanSDK\Bin\glslangValidator.exe -V X:/Vulkan/nuklear/nuklearshaders/nuklear.vert -o X:/Vulkan/nuklear/nuklearshaders/nuklear.vert.spv
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">X:/Vulkan/nuklear/CMakeFiles/ed398889094b8880dded1983211bd70d/nuklear.vert.spv.rule;X:\Vulkan\nuklear\nuklearshaders\nuklear.vert;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">X:\Vulkan\nuklear\nuklearshaders\nuklear.vert.spv</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Generating nuklearshaders/nuklear.vert.spv</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+X:\VulkanSDK\Bin\glslangValidator.exe -V X:/Vulkan/nuklear/nuklearshaders/nuklear.vert -o X:/Vulkan/nuklear/nuklearshaders/nuklear.vert.spv
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">X:/Vulkan/nuklear/CMakeFiles/ed398889094b8880dded1983211bd70d/nuklear.vert.spv.rule;X:\Vulkan\nuklear\nuklearshaders\nuklear.vert;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">X:\Vulkan\nuklear\nuklearshaders\nuklear.vert.spv</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeFiles\ed398889094b8880dded1983211bd70d\nuklear.vert.h.rule">
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Generating nuklearshaders/nuklear.vert.h</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+"C:\Program Files\Git\usr\bin\xxd.exe" -i nuklearshaders/nuklear.vert.spv X:/Vulkan/nuklear/nuklearshaders/nuklear.vert.h
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">X:/Vulkan/nuklear/CMakeFiles/ed398889094b8880dded1983211bd70d/nuklear.vert.h.rule;X:\Vulkan\nuklear\nuklearshaders\nuklear.vert.spv;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">X:\Vulkan\nuklear\nuklearshaders\nuklear.vert.h</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Generating nuklearshaders/nuklear.vert.h</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+"C:\Program Files\Git\usr\bin\xxd.exe" -i nuklearshaders/nuklear.vert.spv X:/Vulkan/nuklear/nuklearshaders/nuklear.vert.h
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">X:/Vulkan/nuklear/CMakeFiles/ed398889094b8880dded1983211bd70d/nuklear.vert.h.rule;X:\Vulkan\nuklear\nuklearshaders\nuklear.vert.spv;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">X:\Vulkan\nuklear\nuklearshaders\nuklear.vert.h</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Generating nuklearshaders/nuklear.vert.h</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+"C:\Program Files\Git\usr\bin\xxd.exe" -i nuklearshaders/nuklear.vert.spv X:/Vulkan/nuklear/nuklearshaders/nuklear.vert.h
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">X:/Vulkan/nuklear/CMakeFiles/ed398889094b8880dded1983211bd70d/nuklear.vert.h.rule;X:\Vulkan\nuklear\nuklearshaders\nuklear.vert.spv;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">X:\Vulkan\nuklear\nuklearshaders\nuklear.vert.h</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Generating nuklearshaders/nuklear.vert.h</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+"C:\Program Files\Git\usr\bin\xxd.exe" -i nuklearshaders/nuklear.vert.spv X:/Vulkan/nuklear/nuklearshaders/nuklear.vert.h
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">X:/Vulkan/nuklear/CMakeFiles/ed398889094b8880dded1983211bd70d/nuklear.vert.h.rule;X:\Vulkan\nuklear\nuklearshaders\nuklear.vert.spv;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">X:\Vulkan\nuklear\nuklearshaders\nuklear.vert.h</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="X:\Vulkan\nuklear\demo.cpp" />
+    <ClCompile Include="X:\Vulkan\nuklear\overlay.c">
+      <CompileAs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">CompileAsC</CompileAs>
+      <CompileAs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">CompileAsC</CompileAs>
+      <CompileAs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">CompileAsC</CompileAs>
+      <CompileAs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">CompileAsC</CompileAs>
+    </ClCompile>
+    <ClInclude Include="X:\Vulkan\nuklear\demoshaders\demo.frag.h" />
+    <ClInclude Include="X:\Vulkan\nuklear\demoshaders\demo.vert.h" />
+    <ClInclude Include="X:\Vulkan\nuklear\nuklearshaders\nuklear.frag.h" />
+    <ClInclude Include="X:\Vulkan\nuklear\nuklearshaders\nuklear.vert.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="X:\Vulkan\nuklear\ZERO_CHECK.vcxproj">
+      <Project>{945BE1DC-AFD5-3816-99BC-E1C22563A7BD}</Project>
+      <Name>ZERO_CHECK</Name>
+    </ProjectReference>
+    <ProjectReference Include="X:\Vulkan\nuklear\glfw-3.2.1\src\glfw.vcxproj">
+      <Project>{63FAA649-D22D-30F8-810E-6E42AD38117B}</Project>
+      <Name>glfw</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

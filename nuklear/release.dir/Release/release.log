@@ -1,0 +1,10 @@
+﻿  Building Custom Rule X:/Vulkan/nuklear/CMakeLists.txt
+  CMake does not need to re-run because X:/Vulkan/nuklear/CMakeFiles/generate.stamp is up-to-date.
+  test.c
+x:\vulkan\nuklear\nuklear\nuklear.h(5548): warning C4996: 'vsprintf': This function or variable may be unsafe. Consider using vsprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.17134.0\ucrt\stdio.h(1469): note: see declaration of 'vsprintf'
+x:\vulkan\nuklear\nuklear\nuklear.h(5630): warning C4996: 'fopen': This function or variable may be unsafe. Consider using fopen_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.17134.0\ucrt\stdio.h(208): note: see declaration of 'fopen'
+x:\vulkan\nuklear\release\nuklear-glfw-vulkan.h(1237): warning C4244: 'initializing': conversion from 'const float' to 'int32_t', possible loss of data
+x:\vulkan\nuklear\release\nuklear-glfw-vulkan.h(1233): warning C4244: 'initializing': conversion from 'const float' to 'uint32_t', possible loss of data
+  release.vcxproj -> X:\Vulkan\nuklear\Release\release.lib

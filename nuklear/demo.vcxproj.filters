@@ -1,0 +1,63 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="X:\Vulkan\nuklear\demo.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="X:\Vulkan\nuklear\overlay.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="X:\Vulkan\nuklear\demoshaders\demo.frag.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="X:\Vulkan\nuklear\demoshaders\demo.vert.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="X:\Vulkan\nuklear\nuklearshaders\nuklear.frag.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="X:\Vulkan\nuklear\nuklearshaders\nuklear.vert.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeLists.txt" />
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeFiles\6edbe054a129f133696873ec914df266\demo.frag.spv.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeFiles\6edbe054a129f133696873ec914df266\demo.frag.h.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeFiles\6edbe054a129f133696873ec914df266\demo.vert.spv.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeFiles\6edbe054a129f133696873ec914df266\demo.vert.h.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeFiles\ed398889094b8880dded1983211bd70d\nuklear.frag.spv.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeFiles\ed398889094b8880dded1983211bd70d\nuklear.frag.h.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeFiles\ed398889094b8880dded1983211bd70d\nuklear.vert.spv.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeFiles\ed398889094b8880dded1983211bd70d\nuklear.vert.h.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{BC01C53E-7245-381A-9CB6-64713716F8D0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{B971E8D5-104B-3632-B738-D388133C9CA4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{0E2D7ECE-EC02-30BB-8C4D-B3A03D14D2A0}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

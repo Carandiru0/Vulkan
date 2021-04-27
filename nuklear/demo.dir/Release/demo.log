@@ -1,0 +1,9 @@
+﻿  demo.cpp
+  overlay.c
+x:\vulkan\nuklear\nuklear-glfw-vulkan.h(1237): warning C4244: 'initializing': conversion from 'const float' to 'int32_t', possible loss of data
+x:\vulkan\nuklear\nuklear-glfw-vulkan.h(1233): warning C4244: 'initializing': conversion from 'const float' to 'uint32_t', possible loss of data
+  Generating code
+x:\vulkan\nuklear\nuklear-glfw-vulkan.h(881): warning C4700: uninitialized local variable 'staging_buffer' used
+  All 1595 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+  Finished generating code
+  demo.vcxproj -> X:\Vulkan\nuklear\Release\demo.exe

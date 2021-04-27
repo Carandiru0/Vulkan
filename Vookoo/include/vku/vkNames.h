@@ -1,0 +1,68 @@
+#pragma once
+
+namespace vkNames
+{
+	namespace CommandBuffer
+	{
+		[[maybe_unused]] static inline constexpr char const* const COMPUTE_CLEARS = "[cb] Compute Clears";
+		[[maybe_unused]] static inline constexpr char const* const COMPUTE_LIGHT = "[cb] Compute Light";
+		[[maybe_unused]] static inline constexpr char const* const TRANSFER_LIGHT = "[cb] Transfer Light";
+		[[maybe_unused]] static inline constexpr char const* const STATIC = "[cb] Static";
+		[[maybe_unused]] static inline constexpr char const* const DYNAMIC = "[cb] Dynamic";
+		[[maybe_unused]] static inline constexpr char const* const PRESENT = "[cb] Present";
+		[[maybe_unused]] static inline constexpr char const* const OVERLAY_RENDER = "[cb] Overlay Render";
+		[[maybe_unused]] static inline constexpr char const* const OVERLAY_TRANSFER = "[cb] Overlay Transfer";
+		[[maybe_unused]] static inline constexpr char const* const CHECKERBOARD = "[cb] Checkerboard";
+	}; // end ns
+
+	namespace FrameBuffer
+	{
+		[[maybe_unused]] static inline constexpr char const* const PRESENT = "[fb] Present";
+		[[maybe_unused]] static inline constexpr char const* const COLOR_DEPTH = "[fb] Color Depth";
+		[[maybe_unused]] static inline constexpr char const* const OFFSCREEN = "[fb] Offscreen Color Depth";
+		[[maybe_unused]] static inline constexpr char const* const MID_COLOR_DEPTH = "[fb] Mid Color Depth";
+		[[maybe_unused]] static inline constexpr char const* const FULL_COLOR_ONLY = "[fb] Full Color Only";
+		[[maybe_unused]] static inline constexpr char const* const HALF_COLOR_ONLY = "[fb] Half Color Only";
+		[[maybe_unused]] static inline constexpr char const* const DEPTH = "[fb] Depth";
+	}
+
+	namespace Renderpass
+	{
+		[[maybe_unused]] static inline constexpr char const* const FINAL = "[rp] Final";
+		[[maybe_unused]] static inline constexpr char const* const OVERLAY = "[rp] Overlay";
+		[[maybe_unused]] static inline constexpr char const* const OFFSCREEN = "[rp] Offscreen";
+		[[maybe_unused]] static inline constexpr char const* const MIDPASS = "[rp] Mid";
+		[[maybe_unused]] static inline constexpr char const* const UPPASS = "[rp] Up";
+		[[maybe_unused]] static inline constexpr char const* const DOWNPASS = "[rp] Down";
+		[[maybe_unused]] static inline constexpr char const* const ZPASS = "[rp] Z";
+	}
+
+	namespace Image
+	{
+		[[maybe_unused]] static inline constexpr char const* const colorImage = "[img] colorImage";
+		[[maybe_unused]] static inline constexpr char const* const depthImage = "[img] depthImage";
+		[[maybe_unused]] static inline constexpr char const* const depthImageResolve = "[img] depthImageResolve";
+		[[maybe_unused]] static inline constexpr char const* const mouseImage_multisampled = "[img] mouseImage_multisampled";
+		[[maybe_unused]] static inline constexpr char const* const mouseImage_resolved = "[img] mouseImage_resolved";
+		[[maybe_unused]] static inline constexpr char const* const stencilCheckerboard = "[img] stencilCheckerboard";
+		[[maybe_unused]] static inline constexpr char const* const lastColorImage = "[img] lastColorImage";
+		[[maybe_unused]] static inline constexpr char const* const colorVolumetricImage_checkered = "[img] colorVolumetricImage_checkered";
+		[[maybe_unused]] static inline constexpr char const* const colorVolumetricImage_resolved = "[img] colorVolumetricImage_resolved";
+		[[maybe_unused]] static inline constexpr char const* const colorVolumetricImage_upsampled = "[img] colorVolumetricImage_upsampled";
+		[[maybe_unused]] static inline constexpr char const* const colorReflectionImage_checkered = "[img] colorReflectionImage_checkered";
+		[[maybe_unused]] static inline constexpr char const* const colorReflectionImage_resolved = "[img] colorReflectionImage_resolved";
+		[[maybe_unused]] static inline constexpr char const* const colorReflectionImage_upsampled = "[img] colorReflectionImage_upsampled";
+		[[maybe_unused]] static inline constexpr char const* const guiImage = "[img] guiImage";
+		[[maybe_unused]] static inline constexpr char const* const offscreenImage = "[img] offscreenImage";
+		[[maybe_unused]] static inline constexpr char const* const PingPongMap = "[img] PingPongMap";
+		[[maybe_unused]] static inline constexpr char const* const LightProbeMap = "[img] LightProbeMap";
+		[[maybe_unused]] static inline constexpr char const* const LightMap_DistanceDirection = "[img] LightMap_DistanceDirection";
+		[[maybe_unused]] static inline constexpr char const* const LightMap_Color = "[img] LightMap_Color";
+		[[maybe_unused]] static inline constexpr char const* const LightMapHistory_DistanceDirection = "[img] LightMapHistory_DistanceDirection";
+		[[maybe_unused]] static inline constexpr char const* const LightMapHistory_Color = "[img] LightMapHistory_Color";
+		[[maybe_unused]] static inline constexpr char const* const OpacityMap = "[img] OpacityMap";
+	}
+}; // end ns
+
+
+

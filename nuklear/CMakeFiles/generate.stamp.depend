@@ -1,0 +1,25 @@
+# CMake generation dependency list for this directory.
+X:/Vulkan/nuklear/CMakeLists.txt
+X:/Vulkan/nuklear/CMakeFiles/3.9.0-rc3/CMakeSystem.cmake
+D:/CMake/share/cmake-3.9/Modules/CMakeSystemSpecificInitialize.cmake
+X:/Vulkan/nuklear/CMakeFiles/3.9.0-rc3/CMakeCCompiler.cmake
+X:/Vulkan/nuklear/CMakeFiles/3.9.0-rc3/CMakeCXXCompiler.cmake
+D:/CMake/share/cmake-3.9/Modules/CMakeSystemSpecificInformation.cmake
+D:/CMake/share/cmake-3.9/Modules/CMakeGenericSystem.cmake
+D:/CMake/share/cmake-3.9/Modules/Platform/Windows.cmake
+D:/CMake/share/cmake-3.9/Modules/Platform/WindowsPaths.cmake
+D:/CMake/share/cmake-3.9/Modules/CMakeCInformation.cmake
+D:/CMake/share/cmake-3.9/Modules/CMakeLanguageInformation.cmake
+D:/CMake/share/cmake-3.9/Modules/Platform/Windows-MSVC-C.cmake
+D:/CMake/share/cmake-3.9/Modules/Platform/Windows-MSVC.cmake
+X:/Vulkan/nuklear/CMakeFiles/3.9.0-rc3/CMakeRCCompiler.cmake
+D:/CMake/share/cmake-3.9/Modules/CMakeRCInformation.cmake
+D:/CMake/share/cmake-3.9/Modules/CMakeCommonLanguageInclude.cmake
+D:/CMake/share/cmake-3.9/Modules/CMakeCXXInformation.cmake
+D:/CMake/share/cmake-3.9/Modules/CMakeLanguageInformation.cmake
+D:/CMake/share/cmake-3.9/Modules/Compiler/MSVC-CXX.cmake
+D:/CMake/share/cmake-3.9/Modules/Compiler/CMakeCommonCompilerMacros.cmake
+D:/CMake/share/cmake-3.9/Modules/Platform/Windows-MSVC-CXX.cmake
+D:/CMake/share/cmake-3.9/Modules/Platform/Windows-MSVC.cmake
+D:/CMake/share/cmake-3.9/Modules/CMakeCommonLanguageInclude.cmake
+X:/Vulkan/nuklear/generate-inlined-include.cmake.in

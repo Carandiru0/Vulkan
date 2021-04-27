@@ -1,0 +1,29 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeLists.txt" />
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeFiles\ed398889094b8880dded1983211bd70d\nuklear.frag.spv.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeFiles\ed398889094b8880dded1983211bd70d\nuklear.frag.h.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeFiles\ed398889094b8880dded1983211bd70d\nuklear.vert.spv.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeFiles\ed398889094b8880dded1983211bd70d\nuklear.vert.h.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="X:\Vulkan\nuklear\CMakeFiles\c8185354dfe5572b4bfe9e4001997a7b\release_header.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="X:\Vulkan\nuklear\CMakeFiles\release_header" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{0E2D7ECE-EC02-30BB-8C4D-B3A03D14D2A0}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
