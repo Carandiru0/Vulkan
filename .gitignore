@@ -29,9 +29,12 @@ Makefile
 CMakeCache.txt
 CMakeFiles
 CMakeScripts
+CMakeLists.txt
 cmake_install.cmake
 cmake_uninstall.cmake
 
 # Specific Directories/Files
+.vs
+Rubbish
 vulkancapsviewer
 desktop.ini

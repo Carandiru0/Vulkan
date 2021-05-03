@@ -48,10 +48,8 @@
 
 #include <array>
 #include <fstream>
-#include <iostream>
 #include <unordered_map>
 #include <vector>
-#include <thread>
 #include <chrono>
 #include <functional>
 #include <cstddef>
@@ -1928,6 +1926,7 @@ public:
   }
 
   /// Dump the capabilities of the physical device used by this window.
+  /*
   void dumpCaps(std::ostream &os, vk::PhysicalDevice pd) const {
     os << "Surface formats\n";
     auto fmts = pd.getSurfaceFormatsKHR(surface_).value;
@@ -1943,6 +1942,7 @@ public:
       std::cout << vk::to_string(pm) << "\n";
     }
   }
+  */
 
   static void defaultRenderFunc(vk::CommandBuffer cb, int imageIndex, vk::RenderPassBeginInfo const&rpbi) {
     vk::CommandBufferBeginInfo bi{};
