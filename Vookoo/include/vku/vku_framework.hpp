@@ -575,7 +575,7 @@ public:
 		  fmt::print(fg(fmt::color::lime_green), "32bit SRGB Backbuffer");
 	  }
 	  else {
-		  fmt::print(fg(fmt::color::red), "[FAIL] 32bit NON-SRGB Backbuffer");
+		  fmt::print(fg(fmt::color::red), "[FAIL] No 32bit SRGB Backbuffer");
 		  return(false); // this is critical, would make everything extremely washed out or extremely dark, fail launch completely so game never pubicly looks like this
 	  }
 
@@ -878,9 +878,11 @@ public:
 		  // only for simplifying this critical section / initialization of all color attachments, depth attachments for readability
 		  auto const& __restrict transientCommandPool = *commandPool_[eCommandPools::TRANSIENT_POOL];
 
-		  colorImage_ = vku::ColorAttachmentImage(device, width_, height_, vku::DefaultSampleCount, transientCommandPool, graphicsQueue_, false, false, false, swapchainImageFormat_);	// not sampled, not inputattachment, not copyable
+		  colorImage_ = vku::ColorAttachmentImage(device, width_, height_, vku::DefaultSampleCount, transientCommandPool, graphicsQueue_, false, false, false, vk::Format::eB8G8R8A8Unorm);	// not sampled, not inputattachment, not copyable
+		  lastColorImage_ = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, false, false, vk::Format::eB8G8R8A8Unorm);	// is sampled, not inputattachment, not copyable
 		  depthImage_ = vku::DepthAttachmentImage(device, width_, height_, vku::DefaultSampleCount, transientCommandPool, graphicsQueue_, false, true);  // is inputattachment
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)colorImage_.image(), vkNames::Image::colorImage);
+		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)lastColorImage_.image(), vkNames::Image::lastColorImage);
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)depthImage_.image(), vkNames::Image::depthImage);
 
 		  mouseImage_.multisampled = vku::ColorAttachmentImage(device, width_, height_, vku::DefaultSampleCount, transientCommandPool, graphicsQueue_, false, false, false, vk::Format::eR16G16Unorm);	// not sampled, not inputattachment, not copyable
@@ -897,10 +899,6 @@ public:
 			  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)depthImageResolve_[i].image(), vkNames::Image::depthImageResolve);
 			  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)stencilCheckerboard_[i].image(), vkNames::Image::stencilCheckerboard);
 		  }
-
-		  lastColorImage_ = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, false, false, swapchainImageFormat_);	// is sampled, not inputattachment, not copyable
-
-		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)lastColorImage_.image(), vkNames::Image::lastColorImage);
 
 		  // vk::ImageUsageFlagBits::eTransferDst no longer needed as temporal blending has been enabled for reconstruction (no clears!)
 		  colorVolumetricImage_.checkered = vku::TextureImageStorage2D(vk::ImageUsageFlagBits::eSampled /*| vk::ImageUsageFlagBits::eTransferDst*/, device, uint32_t(downResFrameBufferSz.x), uint32_t(downResFrameBufferSz.y), 1U, vk::SampleCountFlagBits::e1, vk::Format::eB8G8R8A8Unorm, false, true);  // not host image, is dedicated
@@ -921,15 +919,15 @@ public:
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)colorReflectionImage_.upsampled.image(), vkNames::Image::colorReflectionImage_upsampled);
 
 		  for (uint32_t i = 0 ; i < 2 ; ++i) {
-			  guiImage_.multisampled[i] = vku::ColorAttachmentImage(device, width_, height_, vku::DefaultSampleCount, transientCommandPool, graphicsQueue_, false, false, false, swapchainImageFormat_);	// not sampled, not inputattachment, not copyable
-			  guiImage_.resolved[i] = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, false, true, false, swapchainImageFormat_);	// not sampled, is inputattachment, not copyable
+			  guiImage_.multisampled[i] = vku::ColorAttachmentImage(device, width_, height_, vku::DefaultSampleCount, transientCommandPool, graphicsQueue_, false, false, false);	// not sampled, not inputattachment, not copyable
+			  guiImage_.resolved[i] = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, false, true, false);	// not sampled, is inputattachment, not copyable
 
 			  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)guiImage_.multisampled[i].image(), vkNames::Image::guiImage);
 			  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)guiImage_.resolved[i].image(), vkNames::Image::guiImage);
 		  }
 
-		  offscreenImage_.multisampled = vku::ColorAttachmentImage(device, width_, height_, vku::DefaultSampleCount, transientCommandPool, graphicsQueue_, false, false, false, vk::Format::eB8G8R8A8Unorm);	// not sampled, not inputattachment, not copyable
-		  offscreenImage_.resolved = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, false, true, vk::Format::eB8G8R8A8Unorm);	// sampled, not inputattachment, copyable
+		  offscreenImage_.multisampled = vku::ColorAttachmentImage(device, width_, height_, vku::DefaultSampleCount, transientCommandPool, graphicsQueue_, false, false, false);	// not sampled, not inputattachment, not copyable
+		  offscreenImage_.resolved = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, false, true);	// sampled, not inputattachment, copyable
 
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)offscreenImage_.multisampled.image(), vkNames::Image::offscreenImage);
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)offscreenImage_.resolved.image(), vkNames::Image::offscreenImage);
@@ -1616,20 +1614,9 @@ public:
 	  {
 		  vku::RenderpassMaker rpm;
 
-		  // The colour attachment. (multisampled)
-		  rpm.attachmentBegin(swapchainImageFormat_);
-		  rpm.attachmentSamples(vku::DefaultSampleCount);						// 0
-
-		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eDontCare);				// fully transient, every pixel is written overwritten, no reading
-		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eDontCare);
-		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
-		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
-		  rpm.attachmentInitialLayout(vk::ImageLayout::eColorAttachmentOptimal);
-		  rpm.attachmentFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);
-
 		  // The colour attachment. (resolved)
 		  rpm.attachmentBegin(swapchainImageFormat_);
-		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);					 // 1
+		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);					 // 0
 
 		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eDontCare);
 		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eStore);
@@ -1641,12 +1628,11 @@ public:
 		  // A subpass to render using the above attachment.
 		  rpm.subpassBegin(vk::PipelineBindPoint::eGraphics);
 		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 0);
-		  rpm.subpassResolveAttachment(vk::ImageLayout::eColorAttachmentOptimal, 1);
 
 		  // subpass 1 - overlay final
 		  // The colour attachment. (resolved)
 		  rpm.attachmentBegin(swapchainImageFormat_);
-		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);					// 2
+		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);					// 1
 
 		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eLoad);
 		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eStore);
@@ -1656,8 +1642,8 @@ public:
 		  rpm.attachmentFinalLayout(vk::ImageLayout::ePresentSrcKHR);
 
 		  // The input attachment. (gui 0)
-		  rpm.attachmentBegin(swapchainImageFormat_);
-		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);					// 3
+		  rpm.attachmentBegin(guiImage_.resolved[0].format());
+		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);					// 2
 
 		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eLoad);
 		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eDontCare);
@@ -1667,8 +1653,8 @@ public:
 		  rpm.attachmentFinalLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
 
 		  // The input attachment. (gui 1)
-		  rpm.attachmentBegin(swapchainImageFormat_);
-		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);					// 4
+		  rpm.attachmentBegin(guiImage_.resolved[1].format());
+		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);					// 3
 
 		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eLoad);
 		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eDontCare);
@@ -1679,9 +1665,9 @@ public:
 
 		  // A subpass to render using the above attachment.
 		  rpm.subpassBegin(vk::PipelineBindPoint::eGraphics);
-		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 2);
+		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 1);
+		  rpm.subpassInputAttachment(vk::ImageLayout::eShaderReadOnlyOptimal, 2);
 		  rpm.subpassInputAttachment(vk::ImageLayout::eShaderReadOnlyOptimal, 3);
-		  rpm.subpassInputAttachment(vk::ImageLayout::eShaderReadOnlyOptimal, 4);
 
 		  /* Chapter 32 of Vulkan Spec
 		  When transitioning the image to VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR or VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, there is no need to delay subsequent processing, or perform any visibility operations (as vkQueuePresentKHR performs automatic visibility operations). To achieve this, the dstAccessMask member of the VkImageMemoryBarrier should be set to 0, and the dstStageMask parameter should be set to VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT.
@@ -1723,7 +1709,7 @@ public:
 
 	  framebuffers_[eFrameBuffers::PRESENT] = new vk::UniqueFramebuffer[imageViews_.size()];
 	  for (int i = 0; i != imageViews_.size(); ++i) {
-		  vk::ImageView const attachments[5] = { colorImage_.imageView(), imageViews_[i], imageViews_[i], guiImage_.resolved[0].imageView(), guiImage_.resolved[1].imageView() };
+		  vk::ImageView const attachments[4] = { imageViews_[i], imageViews_[i], guiImage_.resolved[0].imageView(), guiImage_.resolved[1].imageView() };
 		  vk::FramebufferCreateInfo const fbci{ {}, *finalPass_, _countof(attachments), attachments, width_, height_, 1 };
 		  framebuffers_[eFrameBuffers::PRESENT][i] = std::move(device.createFramebufferUnique(fbci).value);
 

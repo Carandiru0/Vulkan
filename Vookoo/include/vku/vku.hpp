@@ -3624,6 +3624,7 @@ inline vk::Format GLtoVKFormat(uint32_t glFormat) {
     case 0x83F2: return vk::Format::eBc3UnormBlock; // GL_COMPRESSED_RGBA_S3TC_DXT3_EXT
     case 0x83F3: return vk::Format::eBc5UnormBlock; // GL_COMPRESSED_RGBA_S3TC_DXT5_EXT
 	case 0x8E8C: return vk::Format::eBc7UnormBlock;	// GL_COMPRESSED_RGBA_BPTC_UNORM_ARB
+	case 0x8E8D: return vk::Format::eBc7SrgbBlock;
   }
   return vk::Format::eUndefined;
 }
