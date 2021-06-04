@@ -1012,13 +1012,15 @@ public:
 		  file.seekg(0, std::ios::end);
 		  int const length = (int)file.tellg();
 
-		  s.opcodes_.resize((size_t)(length / 4));
+		  std::vector<uint32_t> opcodes;
+		  opcodes.reserve((size_t)(length / 4));
+		  opcodes.resize((size_t)(length / 4));
 		  file.seekg(0, std::ios::beg);
-		  file.read((char*)s.opcodes_.data(), s.opcodes_.size() * 4);
+		  file.read((char*)opcodes.data(), opcodes.size() * 4);
 
 		  vk::ShaderModuleCreateInfo ci;
-		  ci.codeSize = s.opcodes_.size() * 4;
-		  ci.pCode = s.opcodes_.data();
+		  ci.codeSize = opcodes.size() * 4;
+		  ci.pCode = opcodes.data();
 		  s.module_ = device.createShaderModuleUnique(ci).value;
 
 		  file.close();
@@ -1087,84 +1089,15 @@ public:
   /// Construct a shader module from a memory
   template<class InIter>
   ShaderModule(const vk::Device &device, InIter begin, InIter end) {
-    s.opcodes_.assign(begin, end);
+
+	std::vector<uint32_t> opcodes;
+    opcodes.assign(begin, end);
     vk::ShaderModuleCreateInfo ci;
-    ci.codeSize = s.opcodes_.size() * 4;
-    ci.pCode = s.opcodes_.data();
+    ci.codeSize = opcodes.size() * 4;
+    ci.pCode = opcodes.data();
     s.module_ = device.createShaderModuleUnique(ci);
 
     s.ok_ = true;
-  }
-
-  /// A variable in a shader.
-  struct Variable {
-    // The name of the variable from the GLSL/HLSL
-    std::string debugName;
-
-    // The internal name (integer) of the variable
-    int name;
-
-    // The location in the binding.
-    int location;
-
-    // The binding in the descriptor set or I/O channel.
-    int binding;
-
-    // The descriptor set (for uniforms)
-    int set;
-    int instruction;
-
-    // Storage class of the variable, eg. spv::StorageClass::Uniform
-    spv::StorageClass storageClass;
-  };
-
-  /// Get a list of variables from the shader.
-  /// 
-  /// This exposes the Uniforms, inputs, outputs, push constants.
-  /// See spv::StorageClass for more details.
-  std::vector<Variable> getVariables() const {
-    auto bound = s.opcodes_[3];
-
-    std::unordered_map<int, int> bindings;
-    std::unordered_map<int, int> locations;
-    std::unordered_map<int, int> sets;
-    std::unordered_map<int, std::string> debugNames;
-
-    for (int i = 5; i != s.opcodes_.size(); i += s.opcodes_[i] >> 16) {
-      spv::Op op = spv::Op(s.opcodes_[i] & 0xffff);
-      if (op == spv::Op::OpDecorate) {
-        int name = s.opcodes_[i + 1];
-        auto decoration = spv::Decoration(s.opcodes_[i + 2]);
-        if (decoration == spv::Decoration::Binding) {
-          bindings[name] = s.opcodes_[i + 3];
-        } else if (decoration == spv::Decoration::Location) {
-          locations[name] = s.opcodes_[i + 3];
-        } else if (decoration == spv::Decoration::DescriptorSet) {
-          sets[name] = s.opcodes_[i + 3];
-        }
-      } else if (op == spv::Op::OpName) {
-        int name = s.opcodes_[i + 1];
-        debugNames[name] = (const char *)&s.opcodes_[i + 2];
-      }
-    }
-
-    std::vector<Variable> result;
-    for (int i = 5; i != s.opcodes_.size(); i += s.opcodes_[i] >> 16) {
-      spv::Op op = spv::Op(s.opcodes_[i] & 0xffff);
-      if (op == spv::Op::OpVariable) {
-        int name = s.opcodes_[i + 1];
-        auto sc = spv::StorageClass(s.opcodes_[i + 3]);
-        Variable b;
-        b.debugName = debugNames[name];
-        b.name = name;
-        b.location = locations[name];
-        b.set = sets[name];
-        b.instruction = i;
-        b.storageClass = sc;
-        result.push_back(b);
-      }
-    }
-    return result;
   }
 
   bool const ok() const { return s.ok_; }
@@ -1173,32 +1106,8 @@ public:
   bool const hasSpecialization() const { return(special.hasSpecialization); }
   vk::SpecializationInfo const* const specialization() const { return(&special.info); }
 
-  /// Write a C++ consumable dump of the shader.
-  /// Todo: make this more idiomatic.
-  std::ostream &write(std::ostream &os) {
-    os << "static const uint32_t shader[] = {\n";
-    char tmp[256];
-    auto p = s.opcodes_.begin();
-    snprintf(
-      tmp, sizeof(tmp), "  0x%08x,0x%08x,0x%08x,0x%08x,0x%08x,\n", p[0], p[1], p[2], p[3], p[4]);
-    os << tmp;
-    for (int i = 5; i != s.opcodes_.size(); i += s.opcodes_[i] >> 16) {
-      char *p = tmp + 2, *e = tmp + sizeof(tmp) - 2;
-      for (int j = i; j != i + (s.opcodes_[i] >> 16); ++j) {
-        p += snprintf(p, e-p, "0x%08x,", s.opcodes_[j]);
-        if (p > e-16) { *p++ = '\n'; *p = 0; os << tmp; p = tmp + 2; }
-      }
-      *p++ = '\n';
-      *p = 0;
-      os << tmp;
-    }
-    os << "};\n\n";
-    return os;
-  }
-
 private:
   struct State {
-    std::vector<uint32_t> opcodes_;
     vk::UniqueShaderModule module_;
     bool ok_ = false;
   };
@@ -1337,7 +1246,7 @@ public:
   }
 
   /// Add a shader module to the pipeline.
-  void shader(vk::ShaderStageFlagBits stage, vku::ShaderModule &shader) {
+  void shader(vk::ShaderStageFlagBits stage, vku::ShaderModule const& __restrict shader) {
     vk::PipelineShaderStageCreateInfo info{};
     info.shadermodule = shader.shadermodule();
     info.pName = "main";  // required to always be main - limitation of glsl spec they did it on purpose
@@ -1533,7 +1442,7 @@ public:
   }
 
   /// Add a shader module to the pipeline.
-  void shader(vk::ShaderStageFlagBits stage, vku::ShaderModule &shader,
+  void shader(vk::ShaderStageFlagBits stage, vku::ShaderModule const& __restrict shader,
                  const char *entryPoint = "main") {
     stage_.shadermodule = shader.shadermodule();
     stage_.pName = entryPoint;

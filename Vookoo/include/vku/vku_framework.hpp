@@ -685,7 +685,7 @@ public:
 		  }
 	  } checkData[eCheckerboard::_size()];
 
-	  vku::ShaderModule vert_{ device_, SHADER_PATH SHADER_POSTQUAD };
+	  vku::ShaderModule const vert_{ device_, SHADER_PATH SHADER_POSTQUAD };
 
 	  for (uint32_t odd = 0; odd < eCheckerboard::_size(); ++odd)
 	  {
@@ -740,7 +740,7 @@ public:
 
 
 		  // temporary pipeline ###################################################################################################################
-		  vku::ShaderModule frag_{ device_, SHADER_CHECKERBOARD(SHADER_PATH, odd) };
+		  vku::ShaderModule const frag_{ device_, SHADER_CHECKERBOARD(SHADER_PATH, odd) };
 
 		  // Build a template for descriptor sets that use these shaders.
 		  vku::DescriptorSetLayoutMaker	dslm;
