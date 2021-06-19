@@ -400,10 +400,10 @@ private:
 };
 
 /// This class wraps a window, a surface and a swap chain for that surface.
-BETTER_ENUM(eCommandPools, uint32_t const, DEFAULT_POOL = 0, OVERLAY_POOL, TRANSIENT_POOL, DMA_TRANSFER_POOL_THREAD_PRIMARY, DMA_TRANSFER_POOL_THREAD_SECONDARY, COMPUTE_POOL);
+BETTER_ENUM(eCommandPools, uint32_t const, DEFAULT_POOL = 0, OVERLAY_POOL, TRANSIENT_POOL, DMA_TRANSFER_POOL_PRIMARY, DMA_TRANSFER_POOL_SECONDARY, COMPUTE_POOL_PRIMARY, COMPUTE_POOL_SECONDARY);
 BETTER_ENUM(eFrameBuffers, uint32_t const, DEPTH, HALF_COLOR_ONLY, FULL_COLOR_ONLY, MID_COLOR_DEPTH, COLOR_DEPTH, PRESENT, OFFSCREEN);
 BETTER_ENUM(eOverlayBuffers, uint32_t const, TRANSFER, RENDER);
-BETTER_ENUM(eComputeBuffers, uint32_t const, TRANSFER_LIGHT, COMPUTE_LIGHT);
+BETTER_ENUM(eComputeBuffers, uint32_t const, TRANSFER_LIGHT, COMPUTE_LIGHT, COMPUTE_TEXTURE);
 
 class Window {
 
@@ -556,26 +556,49 @@ public:
 	  }
 #endif
 	  auto fmts = physicalDevice_.getSurfaceFormats2KHR(surfaceInfo).value;
+	  // default to first format
 	  swapchainImageFormat_ = fmts[0].surfaceFormat.format;
 	  swapchainColorSpace_ = fmts[0].surfaceFormat.colorSpace;
+
+	  // returned errornouse result from driver? Default to preferred 8bit format.
 	  if (fmts.size() == 1 && swapchainImageFormat_ == vk::Format::eUndefined) {
 		  swapchainImageFormat_ = vk::Format::eB8G8R8A8Unorm;
 		  swapchainColorSpace_ = vk::ColorSpaceKHR::eSrgbNonlinear;
 	  }
-	  else {
+	  else { // otherwise find optimal format
+
+		  bool bHDR(false);
+
+		  // search for 10bit target *** no longer using hdr, rather just regular srgb and 10bit color
 		  for (auto& fmt : fmts) {
-			  if (fmt.surfaceFormat.format == vk::Format::eB8G8R8A8Unorm && fmt.surfaceFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
+			  if (fmt.surfaceFormat.format == vk::Format::eA2R10G10B10UnormPack32 && fmt.surfaceFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear ) {
 				  swapchainImageFormat_ = fmt.surfaceFormat.format;
 				  swapchainColorSpace_ = fmt.surfaceFormat.colorSpace;
+				  bHDR = true;
 				  break;
 			  }
 		  }
+
+		  // if no 10 bit target exists,
+		  if (!bHDR) { // search for preferred 8bit target
+			  for (auto& fmt : fmts) {
+				  if (fmt.surfaceFormat.format == vk::Format::eB8G8R8A8Unorm && fmt.surfaceFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
+					  swapchainImageFormat_ = fmt.surfaceFormat.format;
+					  swapchainColorSpace_ = fmt.surfaceFormat.colorSpace;
+					  break;
+				  }
+			  }
+		  }
 	  }
-	  if (swapchainImageFormat_ == vk::Format::eB8G8R8A8Unorm && swapchainColorSpace_ == vk::ColorSpaceKHR::eSrgbNonlinear) {
-		  fmt::print(fg(fmt::color::lime_green), "32bit SRGB Backbuffer");
+
+	  if (swapchainImageFormat_ == vk::Format::eA2R10G10B10UnormPack32 && swapchainColorSpace_ == vk::ColorSpaceKHR::eSrgbNonlinear) {
+		  fmt::print(fg(fmt::color::lime_green), "10bit Backbuffer");
+	  }
+	  else if (swapchainImageFormat_ == vk::Format::eB8G8R8A8Unorm && swapchainColorSpace_ == vk::ColorSpaceKHR::eSrgbNonlinear) {
+		  fmt::print(fg(fmt::color::lime_green), "8bit Backbuffer");
 	  }
 	  else {
-		  fmt::print(fg(fmt::color::red), "[FAIL] No 32bit SRGB Backbuffer");
+		  fmt::print(fg(fmt::color::red), "[FAIL] No compatible backbuffer format / color space found!");
 		  return(false); // this is critical, would make everything extremely washed out or extremely dark, fail launch completely so game never pubicly looks like this
 	  }
 
@@ -1817,7 +1840,8 @@ public:
 			  semaphores[i].commandCompleteSemaphore_ = device.createSemaphoreUnique(sci).value;
 			  semaphores[i].transferCompleteSemaphore_[0] = device.createSemaphoreUnique(sci).value;	// compute transfer
 			  semaphores[i].transferCompleteSemaphore_[1] = device.createSemaphoreUnique(sci).value;	// dynamic transfer
-			  semaphores[i].computeCompleteSemaphore_ = device.createSemaphoreUnique(sci).value; // compute process
+			  semaphores[i].computeCompleteSemaphore_[0] = device.createSemaphoreUnique(sci).value;		// compute process light
+			  semaphores[i].computeCompleteSemaphore_[1] = device.createSemaphoreUnique(sci).value;		// compute process textures
 		  }
 	  }
 	  
@@ -1834,12 +1858,13 @@ public:
 	  {
 
 		  vk::CommandPoolCreateInfo cpci{ ccbits::eTransient | ccbits::eResetCommandBuffer, transferQueueFamilyIndex };
-		  commandPool_[eCommandPools::DMA_TRANSFER_POOL_THREAD_PRIMARY] = device.createCommandPoolUnique(cpci).value;
-		  commandPool_[eCommandPools::DMA_TRANSFER_POOL_THREAD_SECONDARY] = device.createCommandPoolUnique(cpci).value;
+		  commandPool_[eCommandPools::DMA_TRANSFER_POOL_PRIMARY] = device.createCommandPoolUnique(cpci).value;
+		  commandPool_[eCommandPools::DMA_TRANSFER_POOL_SECONDARY] = device.createCommandPoolUnique(cpci).value;
 	  }
 	  {
 		  vk::CommandPoolCreateInfo cpci{ ccbits::eTransient | ccbits::eResetCommandBuffer, computeQueueFamilyIndex };
-		  commandPool_[eCommandPools::COMPUTE_POOL] = device.createCommandPoolUnique(cpci).value;
+		  commandPool_[eCommandPools::COMPUTE_POOL_PRIMARY] = device.createCommandPoolUnique(cpci).value;
+		  commandPool_[eCommandPools::COMPUTE_POOL_SECONDARY] = device.createCommandPoolUnique(cpci).value;
 	  }
 
 	  // Create draw buffers
@@ -1873,7 +1898,7 @@ public:
 	  {
 		  { // dynamic
 			  uint32_t const resource_count((uint32_t)imageViews_.size());
-			  vk::CommandBufferAllocateInfo cbai{ *commandPool_[eCommandPools::DMA_TRANSFER_POOL_THREAD_PRIMARY], vk::CommandBufferLevel::ePrimary, resource_count };
+			  vk::CommandBufferAllocateInfo cbai{ *commandPool_[eCommandPools::DMA_TRANSFER_POOL_PRIMARY], vk::CommandBufferLevel::ePrimary, resource_count };
 			  dynamicDrawBuffers_.allocate(device, cbai);
 			  for (uint32_t i = 0; i < resource_count; ++i) {
 				  VKU_SET_OBJECT_NAME(vk::ObjectType::eCommandBuffer, (VkCommandBuffer)* dynamicDrawBuffers_.cb[0][i], vkNames::CommandBuffer::DYNAMIC);
@@ -1881,7 +1906,7 @@ public:
 		  }
 		  { // compute transfer
 			  uint32_t const resource_count(2U);
-			  vk::CommandBufferAllocateInfo cbai{ *commandPool_[eCommandPools::DMA_TRANSFER_POOL_THREAD_PRIMARY], vk::CommandBufferLevel::ePrimary, resource_count }; // 2 resources
+			  vk::CommandBufferAllocateInfo cbai{ *commandPool_[eCommandPools::DMA_TRANSFER_POOL_PRIMARY], vk::CommandBufferLevel::ePrimary, resource_count }; // 2 resources
 			  computeDrawBuffers_.allocate<eComputeBuffers::TRANSFER_LIGHT>(device, cbai);
 			  for (uint32_t i = 0; i < resource_count; ++i) {
 				  computeCommandsDirty_[i] = false;
@@ -1890,7 +1915,7 @@ public:
 		  }
 		  { // overlay transfer
 			  uint32_t const resource_count((uint32_t)imageViews_.size());
-			  vk::CommandBufferAllocateInfo cbai{ *commandPool_[eCommandPools::DMA_TRANSFER_POOL_THREAD_SECONDARY], vk::CommandBufferLevel::ePrimary, resource_count };
+			  vk::CommandBufferAllocateInfo cbai{ *commandPool_[eCommandPools::DMA_TRANSFER_POOL_SECONDARY], vk::CommandBufferLevel::ePrimary, resource_count };
 			  overlayDrawBuffers_.allocate<eOverlayBuffers::TRANSFER>(device, cbai);
 			  for (uint32_t i = 0; i < resource_count; ++i) {
 				  VKU_SET_OBJECT_NAME(vk::ObjectType::eCommandBuffer, (VkCommandBuffer)*overlayDrawBuffers_.cb[eOverlayBuffers::TRANSFER][i], vkNames::CommandBuffer::OVERLAY_TRANSFER);
@@ -1899,10 +1924,18 @@ public:
 	  }
 	  { // compute render
 		  uint32_t const resource_count(2U);
-		  vk::CommandBufferAllocateInfo cbai{ *commandPool_[eCommandPools::COMPUTE_POOL], vk::CommandBufferLevel::ePrimary, resource_count };	// 2 resources
+		  vk::CommandBufferAllocateInfo cbai{ *commandPool_[eCommandPools::COMPUTE_POOL_PRIMARY], vk::CommandBufferLevel::ePrimary, resource_count };	// 2 resources
 		  computeDrawBuffers_.allocate<eComputeBuffers::COMPUTE_LIGHT>(device, cbai);
 		  for (uint32_t i = 0; i < resource_count; ++i) {
 			  VKU_SET_OBJECT_NAME(vk::ObjectType::eCommandBuffer, (VkCommandBuffer)* computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_LIGHT][i], vkNames::CommandBuffer::COMPUTE_LIGHT);
+		  }
+	  }
+	  { // compute textureShaders
+		  uint32_t const resource_count(2U);
+		  vk::CommandBufferAllocateInfo cbai{ *commandPool_[eCommandPools::COMPUTE_POOL_SECONDARY], vk::CommandBufferLevel::ePrimary, resource_count };	// 2 resources
+		  computeDrawBuffers_.allocate<eComputeBuffers::COMPUTE_TEXTURE>(device, cbai);
+		  for (uint32_t i = 0; i < resource_count; ++i) {
+			  VKU_SET_OBJECT_NAME(vk::ObjectType::eCommandBuffer, (VkCommandBuffer)*computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_TEXTURE][i], vkNames::CommandBuffer::COMPUTE_TEXTURE);
 		  }
 	  }
 
@@ -2098,10 +2131,38 @@ public:
 	  // ###################################################### //
 	  async_long_task::wait<background_critical>(present_task_id, "present");  // bugfix: absolutely critical that this is done here, any other location results in validation THREADING errors
 	  // ####################################################### //
-
-	  vk::Semaphore const tcSema[2] = { *semaphores[resource_index].transferCompleteSemaphore_[0], *semaphores[resource_index].transferCompleteSemaphore_[1] };
 	  vk::SubmitInfo submit{};
 
+	  // COMPUTE SUBMIT //
+	  vk::Semaphore const ctexSema = { *semaphores[resource_index].computeCompleteSemaphore_[eComputeBuffers::COMPUTE_TEXTURE - 1] };
+	  {
+		  vk::CommandBuffer const compute_process[3] = { nullptr, nullptr, *computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_TEXTURE][resource_index] };
+
+		  vk::Fence const compute_fence = computeDrawBuffers_.fence[eComputeBuffers::COMPUTE_TEXTURE][resource_index];
+		  if (computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_TEXTURE][resource_index]) {
+			  device.waitForFences(compute_fence, VK_TRUE, umax);
+			  device.resetFences(compute_fence);
+			  computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_TEXTURE][resource_index] = false; // reset
+		  }
+
+		  gpu_compute(std::forward<compute_pass&& __restrict>({ compute_process[eComputeBuffers::TRANSFER_LIGHT], compute_process[eComputeBuffers::COMPUTE_LIGHT], compute_process[eComputeBuffers::COMPUTE_TEXTURE], resource_index }));    // compute part resets the dirty state that transfer set
+
+		  //vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eComputeShader };
+
+		  submit.waitSemaphoreCount = 0;
+		  submit.pWaitSemaphores = nullptr;				// waiting on nothing
+		  submit.pWaitDstStageMask = nullptr;
+		  submit.commandBufferCount = 1;
+		  submit.pCommandBuffers = &compute_process[eComputeBuffers::COMPUTE_TEXTURE];				// submitting compute cb
+		  submit.signalSemaphoreCount = 1;
+		  submit.pSignalSemaphores = &ctexSema;			// signalling compute cb completion
+		  computeQueue_[!resource_index].submit(1, &submit, compute_fence); // always use "other" compute queue so they potentially can be running independently and in parallel
+
+		  computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_TEXTURE][resource_index] = true;
+	  }
+
+	  vk::Semaphore const tcSema[2] = { *semaphores[resource_index].transferCompleteSemaphore_[0], *semaphores[resource_index].transferCompleteSemaphore_[1] };
+	  
 	  {
 		  vk::Fence const dma_transfer_light_fence = computeDrawBuffers_.fence[eComputeBuffers::TRANSFER_LIGHT][resource_index];
 		  if (computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index]) {
@@ -2110,12 +2171,12 @@ public:
 			  computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = false; // reset
 		  }
 
-		  vk::CommandBuffer const compute_upload_light[2] = { *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER_LIGHT][resource_index], nullptr };
+		  vk::CommandBuffer const compute_upload_light[3] = { *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER_LIGHT][resource_index], nullptr, nullptr };
 
 		  if (!computeCommandsDirty_[resource_index])  // only if not dirty already
 		  {
 			  // upload light
-			  computeCommandsDirty_[resource_index] = gpu_compute(std::forward<compute_pass&& __restrict>({ compute_upload_light[eComputeBuffers::TRANSFER_LIGHT], compute_upload_light[eComputeBuffers::COMPUTE_LIGHT], resource_index }));
+			  computeCommandsDirty_[resource_index] = gpu_compute(std::forward<compute_pass&& __restrict>({ compute_upload_light[eComputeBuffers::TRANSFER_LIGHT], compute_upload_light[eComputeBuffers::COMPUTE_LIGHT], compute_upload_light[eComputeBuffers::COMPUTE_TEXTURE], resource_index }));
 		  }
 
 		  // COMPUTE DMA TRANSFER SUBMIT //
@@ -2174,11 +2235,11 @@ public:
 	  }
 
 	  // COMPUTE SUBMIT //
-	  vk::Semaphore const cSema = { *semaphores[resource_index].computeCompleteSemaphore_ };
+	  vk::Semaphore const cSema = { *semaphores[resource_index].computeCompleteSemaphore_[eComputeBuffers::COMPUTE_LIGHT - 1] };
 	  bool bAsyncCompute(false);
 
 	  if (computeCommandsDirty_[resource_index]) {
-		  vk::CommandBuffer const compute_process[2] = { nullptr, *computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_LIGHT][resource_index] };
+		  vk::CommandBuffer const compute_process[3] = { nullptr, *computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_LIGHT][resource_index], nullptr };
 		  
 		  vk::Fence const compute_fence = computeDrawBuffers_.fence[eComputeBuffers::COMPUTE_LIGHT][resource_index];
 		  if (computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index]) {
@@ -2187,7 +2248,7 @@ public:
 			  computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index] = false; // reset
 		  }
 		  
-		  computeCommandsDirty_[resource_index] = gpu_compute(std::forward<compute_pass&& __restrict>({ compute_process[eComputeBuffers::TRANSFER_LIGHT], compute_process[eComputeBuffers::COMPUTE_LIGHT], resource_index }));    // compute part resets the dirty state that transfer set
+		  computeCommandsDirty_[resource_index] = gpu_compute(std::forward<compute_pass&& __restrict>({ compute_process[eComputeBuffers::TRANSFER_LIGHT], compute_process[eComputeBuffers::COMPUTE_LIGHT], compute_process[eComputeBuffers::COMPUTE_TEXTURE], resource_index }));    // compute part resets the dirty state that transfer set
 
 		  vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eComputeShader };
 
@@ -2221,7 +2282,7 @@ public:
 	  }
 	  //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%//
 
-	vk::Semaphore const iatccSema[3] = { iaSema, tcSema[1], cSema };
+	vk::Semaphore const iatexctccSema[4] = { iaSema, ctexSema, tcSema[1], cSema };
 
 	// STATIC SUBMIT //
 	{
@@ -2234,10 +2295,10 @@ public:
 		}
 
 		vk::CommandBuffer const cb = *staticDrawBuffers_.cb[0][imageIndex];
-		vk::PipelineStageFlags waitStages[3] = { vk::PipelineStageFlagBits::eVertexInput, vk::PipelineStageFlagBits::eVertexInput, vk::PipelineStageFlagBits::eFragmentShader }; // wait at stage data is required
+		vk::PipelineStageFlags waitStages[4] = { vk::PipelineStageFlagBits::eVertexInput, vk::PipelineStageFlagBits::eVertexInput, vk::PipelineStageFlagBits::eFragmentShader, vk::PipelineStageFlagBits::eFragmentShader }; // wait at stage data is required
 
-		submit.waitSemaphoreCount = 2 + (uint32_t)bAsyncCompute;
-		submit.pWaitSemaphores = iatccSema;		// waiting on dynamic transfer & input acquire & compute processing
+		submit.waitSemaphoreCount = 3 + (uint32_t)bAsyncCompute;
+		submit.pWaitSemaphores = iatexctccSema;		// waiting on dynamic transfer & input acquire & compute processing (both texture and light)
 		submit.pWaitDstStageMask = waitStages;
 		submit.commandBufferCount = 1;
 		submit.pCommandBuffers = &cb;				// submitting static cb
@@ -2439,7 +2500,7 @@ private:
 	  vk::UniqueSemaphore imageAcquireSemaphore_;
 	  vk::UniqueSemaphore commandCompleteSemaphore_;
 	  vk::UniqueSemaphore transferCompleteSemaphore_[2];
-	  vk::UniqueSemaphore computeCompleteSemaphore_;
+	  vk::UniqueSemaphore computeCompleteSemaphore_[2];
   } semaphores[2];
   
   vk::UniqueCommandPool		commandPool_[eCommandPools::_size()];
@@ -2450,7 +2511,7 @@ private:
   std::vector<vk::Image> images_;
 
   vk::UniqueFramebuffer* framebuffers_[eFrameBuffers::_size()] = { nullptr };
-  CommandBufferContainer<eComputeBuffers::_size()> computeDrawBuffers_;	// one for transfer, one for computing ....
+  CommandBufferContainer<eComputeBuffers::_size()> computeDrawBuffers_;	// one for transfer, one for computing light, one for computing textures ....
   CommandBufferContainer<1> staticDrawBuffers_;
   CommandBufferContainer<1> dynamicDrawBuffers_;
   CommandBufferContainer<eOverlayBuffers::_size()> overlayDrawBuffers_;	// one for transfer, one for rendering

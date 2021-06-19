@@ -363,6 +363,9 @@ GLFWAPI void glfwWindowHint(int hint, int value)
         case GLFW_COCOA_RETINA_FRAMEBUFFER:
             _glfw.hints.window.ns.retina = value ? GLFW_TRUE : GLFW_FALSE;
             return;
+        case GLFW_WIN32_KEYBOARD_MENU:
+            _glfw.hints.window.win32.keymenu = value ? GLFW_TRUE : GLFW_FALSE;
+            return;
         case GLFW_COCOA_GRAPHICS_SWITCHING:
             _glfw.hints.context.nsgl.offline = value ? GLFW_TRUE : GLFW_FALSE;
             return;
@@ -393,7 +396,7 @@ GLFWAPI void glfwWindowHint(int hint, int value)
         case GLFW_OPENGL_FORWARD_COMPAT:
             _glfw.hints.context.forward = value ? GLFW_TRUE : GLFW_FALSE;
             return;
-        case GLFW_OPENGL_DEBUG_CONTEXT:
+        case GLFW_CONTEXT_DEBUG:
             _glfw.hints.context.debug = value ? GLFW_TRUE : GLFW_FALSE;
             return;
         case GLFW_CONTEXT_NO_ERROR:
@@ -843,7 +846,7 @@ GLFWAPI int glfwGetWindowAttrib(GLFWwindow* handle, int attrib)
             return window->context.robustness;
         case GLFW_OPENGL_FORWARD_COMPAT:
             return window->context.forward;
-        case GLFW_OPENGL_DEBUG_CONTEXT:
+        case GLFW_CONTEXT_DEBUG:
             return window->context.debug;
         case GLFW_OPENGL_PROFILE:
             return window->context.profile;

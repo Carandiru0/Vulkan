@@ -107,9 +107,11 @@ extern "C" {
  */
 #include <stdint.h>
 
-#if defined(GLFW_INCLUDE_VULKAN)
-  #include <vulkan/vulkan.h>
-#endif /* Vulkan header */
+#if defined(GLFW_INCLUDE_VULKAN)								// ###############################################
+#define VK_NO_PROTOTYPES
+	#include "../../Vookoo/include/vku/volk/volk.h"
+	#include <vulkan/vulkan.h>
+#endif /* Vulkan header */										// ###############################################
 
 /* The Vulkan header may have indirectly included windows.h (because of
  * VK_USE_PLATFORM_WIN32_KHR) so we offer our replacement symbols after it.
@@ -145,51 +147,51 @@ extern "C" {
  */
 #if defined(GLFW_INCLUDE_ES1)
 
- #include <GLES/gl.h>
+ //#include <GLES/gl.h>
  #if defined(GLFW_INCLUDE_GLEXT)
-  #include <GLES/glext.h>
+ // #include <GLES/glext.h>
  #endif
 
 #elif defined(GLFW_INCLUDE_ES2)
 
- #include <GLES2/gl2.h>
+ //#include <GLES2/gl2.h>
  #if defined(GLFW_INCLUDE_GLEXT)
-  #include <GLES2/gl2ext.h>
+ // #include <GLES2/gl2ext.h>
  #endif
 
 #elif defined(GLFW_INCLUDE_ES3)
 
- #include <GLES3/gl3.h>
+ //#include <GLES3/gl3.h>
  #if defined(GLFW_INCLUDE_GLEXT)
-  #include <GLES2/gl2ext.h>
+ // #include <GLES2/gl2ext.h>
  #endif
 
 #elif defined(GLFW_INCLUDE_ES31)
 
- #include <GLES3/gl31.h>
+ //#include <GLES3/gl31.h>
  #if defined(GLFW_INCLUDE_GLEXT)
-  #include <GLES2/gl2ext.h>
+ // #include <GLES2/gl2ext.h>
  #endif
 
 #elif defined(GLFW_INCLUDE_ES32)
 
- #include <GLES3/gl32.h>
+ //#include <GLES3/gl32.h>
  #if defined(GLFW_INCLUDE_GLEXT)
-  #include <GLES2/gl2ext.h>
+//  #include <GLES2/gl2ext.h>
  #endif
 
 #elif defined(GLFW_INCLUDE_GLCOREARB)
 
  #if defined(__APPLE__)
 
-  #include <OpenGL/gl3.h>
+  //#include <OpenGL/gl3.h>
   #if defined(GLFW_INCLUDE_GLEXT)
-   #include <OpenGL/gl3ext.h>
+  // #include <OpenGL/gl3ext.h>
   #endif /*GLFW_INCLUDE_GLEXT*/
 
  #else /*__APPLE__*/
 
-  #include <GL/glcorearb.h>
+  //#include <GL/glcorearb.h>
 
  #endif /*__APPLE__*/
 
@@ -200,19 +202,19 @@ extern "C" {
   #if !defined(GLFW_INCLUDE_GLEXT)
    #define GL_GLEXT_LEGACY
   #endif
-  #include <OpenGL/gl.h>
+  //#include <OpenGL/gl.h>
   #if defined(GLFW_INCLUDE_GLU)
-   #include <OpenGL/glu.h>
+  // #include <OpenGL/glu.h>
   #endif
 
  #else /*__APPLE__*/
 
-  #include <GL/gl.h>
+  //#include <GL/gl.h>
   #if defined(GLFW_INCLUDE_GLEXT)
-   #include <GL/glext.h>
+  // #include <GL/glext.h>
   #endif
   #if defined(GLFW_INCLUDE_GLU)
-   #include <GL/glu.h>
+  // #include <GL/glu.h>
   #endif
 
  #endif /*__APPLE__*/
@@ -4137,7 +4139,7 @@ GLFWAPI void glfwSetInputMode(GLFWwindow* window, int mode, int value);
  *  @ingroup input
  */
 GLFWAPI int glfwRawMouseMotionSupported(void);
-
+GLFWAPI int glfwPlatformRawMouseIsEnabled(GLFWwindow* window);
 /*! @brief Returns the layout-specific name of the specified printable key.
  *
  *  This function returns the name of the specified printable key, encoded as
@@ -5246,7 +5248,7 @@ GLFWAPI int glfwGetGamepadState(int jid, GLFWgamepadstate* state);
  *  This function sets the system clipboard to the specified, UTF-8 encoded
  *  string.
  *
- *  @param[in] window Deprecated.  Any valid window or `NULL`.
+ *  @param[in] window 
  *  @param[in] string A UTF-8 encoded string.
  *
  *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED and @ref
@@ -5273,7 +5275,7 @@ GLFWAPI void glfwSetClipboardString(GLFWwindow* window, const char* string);
  *  if its contents cannot be converted, `NULL` is returned and a @ref
  *  GLFW_FORMAT_UNAVAILABLE error is generated.
  *
- *  @param[in] window Deprecated.  Any valid window or `NULL`.
+ *  @param[in] window
  *  @return The contents of the clipboard as a UTF-8 encoded string, or `NULL`
  *  if an [error](@ref error_handling) occurred.
  *
@@ -5489,7 +5491,7 @@ GLFWAPI GLFWwindow* glfwGetCurrentContext(void);
  *
  *  @ingroup window
  */
-GLFWAPI void glfwSwapBuffers(GLFWwindow* window);
+//GLFWAPI void glfwSwapBuffers(GLFWwindow* window);
 
 /*! @brief Sets the swap interval for the current context.
  *
@@ -5535,7 +5537,7 @@ GLFWAPI void glfwSwapBuffers(GLFWwindow* window);
  *
  *  @ingroup context
  */
-GLFWAPI void glfwSwapInterval(int interval);
+//GLFWAPI void glfwSwapInterval(int interval);
 
 /*! @brief Returns whether the specified extension is available.
  *
@@ -5573,7 +5575,7 @@ GLFWAPI void glfwSwapInterval(int interval);
  *
  *  @ingroup context
  */
-GLFWAPI int glfwExtensionSupported(const char* extension);
+//GLFWAPI int glfwExtensionSupported(const char* extension);
 
 /*! @brief Returns the address of the specified function for the current
  *  context.

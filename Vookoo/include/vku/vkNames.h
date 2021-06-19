@@ -4,7 +4,7 @@ namespace vkNames
 {
 	namespace CommandBuffer
 	{
-		[[maybe_unused]] static inline constexpr char const* const COMPUTE_CLEARS = "[cb] Compute Clears";
+		[[maybe_unused]] static inline constexpr char const* const COMPUTE_TEXTURE = "[cb] Compute Textures";
 		[[maybe_unused]] static inline constexpr char const* const COMPUTE_LIGHT = "[cb] Compute Light";
 		[[maybe_unused]] static inline constexpr char const* const TRANSFER_LIGHT = "[cb] Transfer Light";
 		[[maybe_unused]] static inline constexpr char const* const STATIC = "[cb] Static";

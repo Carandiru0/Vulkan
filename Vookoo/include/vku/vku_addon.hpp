@@ -66,7 +66,7 @@ namespace vku {
 
 	/* These constants are defined in vku_addon.hpp */ // vku.hpp line ~1550 for debuging when these constants are exceeded
 	static constexpr uint32_t const
-		MAX_NUM_DESCRIPTOR_SETS = 12,
+		MAX_NUM_DESCRIPTOR_SETS = 15,
 		MAX_NUM_UNIFORM_BUFFERS = 8,
 		MAX_NUM_IMAGES = 80,
 		MAX_NUM_STORAGE_BUFFERS = 10,
@@ -132,9 +132,9 @@ namespace vku {
 				queued[index_wide].emplace_back(true);					// initial state is queued because fence is signaled initially too
 				recorded[index_wide].emplace_back(false);
 
-				vk::CommandBuffer cb(*cb[index_wide][i]);
-				cb.begin(bi);
-				cb.end();
+				vk::CommandBuffer cb_(*(cb[index_wide][i]));
+				cb_.begin(bi);
+				cb_.end();
 				
 			}
 		}
@@ -157,7 +157,8 @@ namespace vku {
 
 	typedef struct {
 		vk::CommandBuffer cb_transfer_light;
-		vk::CommandBuffer cb_render;
+		vk::CommandBuffer cb_render_light;
+		vk::CommandBuffer cb_render_texture;
 		uint32_t resource_index;
 
 	} compute_pass;

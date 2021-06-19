@@ -2527,14 +2527,13 @@ public:
 	  switch (oldLayout) {
 	  case il::eUndefined: break;
 	  case il::eGeneral: 
-#ifndef NDEBUG
-		  assert_print(false, "setLayoutCompute cannot transition from General Layout");  
-#endif
+		  srcMask = afb::eShaderWrite;	// assumes only compute and it was write-only
+		  srcStageMask = psfb::eComputeShader;
 		  break;
 	  case il::eColorAttachmentOptimal: srcMask = afb::eColorAttachmentWrite; srcStageMask = psfb::eColorAttachmentOutput; dependencyFlags = vk::DependencyFlagBits::eByRegion; break;
 	  case il::eDepthStencilAttachmentOptimal: srcMask = afb::eDepthStencilAttachmentWrite; srcStageMask = psfb::eEarlyFragmentTests | psfb::eLateFragmentTests; dependencyFlags = vk::DependencyFlagBits::eByRegion; break;
 	  case il::eDepthStencilReadOnlyOptimal: srcMask = afb::eDepthStencilAttachmentRead; srcStageMask = psfb::eEarlyFragmentTests | psfb::eLateFragmentTests; dependencyFlags = vk::DependencyFlagBits::eByRegion; break;
-	  case il::eShaderReadOnlyOptimal: dependencyFlags = vk::DependencyFlagBits::eByRegion; break;
+	  case il::eShaderReadOnlyOptimal: srcMask = afb::eShaderRead; srcStageMask = psfb::eFragmentShader; /*assumes frag shader*/ dependencyFlags = vk::DependencyFlagBits::eByRegion; break;
 	  case il::eTransferSrcOptimal: srcMask = afb::eTransferRead; srcStageMask = psfb::eTransfer;  break;
 	  case il::eTransferDstOptimal: srcMask = afb::eTransferWrite; srcStageMask = psfb::eTransfer; break;
 	  case il::ePreinitialized: srcMask = afb::eTransferWrite | afb::eHostWrite; break;

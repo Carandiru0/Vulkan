@@ -433,7 +433,6 @@ _GLFWjoystick* _glfwAllocJoystick(const char* name,
 
     js = _glfw.joysticks + jid;
     js->present     = GLFW_TRUE;
-    js->name        = _glfw_strdup(name);
     js->axes        = calloc(axisCount, sizeof(float));
     js->buttons     = calloc(buttonCount + (size_t) hatCount * 4, 1);
     js->hats        = calloc(hatCount, 1);
@@ -441,6 +440,7 @@ _GLFWjoystick* _glfwAllocJoystick(const char* name,
     js->buttonCount = buttonCount;
     js->hatCount    = hatCount;
 
+    strncpy(js->name, name, sizeof(js->name) - 1);
     strncpy(js->guid, guid, sizeof(js->guid) - 1);
     js->mapping = findValidMapping(js);
 
@@ -451,7 +451,6 @@ _GLFWjoystick* _glfwAllocJoystick(const char* name,
 //
 void _glfwFreeJoystick(_GLFWjoystick* js)
 {
-    free(js->name);
     free(js->axes);
     free(js->buttons);
     free(js->hats);
@@ -594,17 +593,9 @@ GLFWAPI void glfwSetInputMode(GLFWwindow* handle, int mode, int value)
 GLFWAPI int glfwRawMouseMotionSupported(void)
 {
     _GLFW_REQUIRE_INIT_OR_RETURN(GLFW_FALSE);
-    return _glfwPlatformRawMouseMotionSupported();
+    return GLFW_FALSE;
 }
-GLFWAPI GLFWbool glfwPlatformRawMouseIsEnabled(GLFWwindow* handle)
-{
-    _GLFW_REQUIRE_INIT_OR_RETURN(GLFW_FALSE);
 
-    _GLFWwindow* window = (_GLFWwindow*)handle;
-    assert(window != NULL);
-
-    return _glfwPlatformRawMouseIsEnabled(window);
-}
 GLFWAPI const char* glfwGetKeyName(int key, int scancode)
 {
     _GLFW_REQUIRE_INIT_OR_RETURN(NULL);
@@ -768,9 +759,13 @@ GLFWAPI GLFWcursor* glfwCreateStandardCursor(int shape)
     if (shape != GLFW_ARROW_CURSOR &&
         shape != GLFW_IBEAM_CURSOR &&
         shape != GLFW_CROSSHAIR_CURSOR &&
-        shape != GLFW_HAND_CURSOR &&
-        shape != GLFW_HRESIZE_CURSOR &&
-        shape != GLFW_VRESIZE_CURSOR)
+        shape != GLFW_POINTING_HAND_CURSOR &&
+        shape != GLFW_RESIZE_EW_CURSOR &&
+        shape != GLFW_RESIZE_NS_CURSOR &&
+        shape != GLFW_RESIZE_NWSE_CURSOR &&
+        shape != GLFW_RESIZE_NESW_CURSOR &&
+        shape != GLFW_RESIZE_ALL_CURSOR &&
+        shape != GLFW_NOT_ALLOWED_CURSOR)
     {
         _glfwInputError(GLFW_INVALID_ENUM, "Invalid standard cursor 0x%08X", shape);
         return NULL;
@@ -1346,18 +1341,18 @@ GLFWAPI int glfwGetGamepadState(int jid, GLFWgamepadstate* state)
 	return GLFW_FALSE;
 }
 
-GLFWAPI void glfwSetClipboardString(GLFWwindow* window, const char* string)
+GLFWAPI void glfwSetClipboardString(GLFWwindow* handle, const char* string)
 {
     assert(string != NULL);
 
     _GLFW_REQUIRE_INIT();
-    _glfwPlatformSetClipboardString((_GLFWwindow*)window, string);
+    _glfwPlatformSetClipboardString((_GLFWwindow*)handle, string);
 }
 
-GLFWAPI const char* glfwGetClipboardString(GLFWwindow* window)
+GLFWAPI const char* glfwGetClipboardString(GLFWwindow* handle)
 {
     _GLFW_REQUIRE_INIT_OR_RETURN(NULL);
-    return _glfwPlatformGetClipboardString((_GLFWwindow*)window);
+    return _glfwPlatformGetClipboardString((_GLFWwindow*)handle);
 }
 
 GLFWAPI double glfwGetTime(void)
