@@ -132,7 +132,7 @@ namespace gpu_queue_non_blocking
 
 	public:
 		lambda_task_gpu(vk::Device const& __restrict device_, vk::Queue const& __restrict queue_, vk::CommandBufferAllocateInfo const& __restrict cbai_, std::function<void(vk::CommandBuffer cb)> const& f_, root_lambda const& l_)
-			: device(device_), queue(queue_), cbai(cbai_), lambda(l_)
+			: device(device_), queue(queue_), cbai(cbai_), user_lambda(f_), lambda(l_)
 		{}
 
 		STATIC_INLINE void enqueue(vk::Device const& __restrict device_, vk::Queue const& __restrict queue_, vk::CommandBufferAllocateInfo const& __restrict cbai_, std::function<void(vk::CommandBuffer cb)> const& f_, root_lambda const& l_) {
@@ -141,7 +141,7 @@ namespace gpu_queue_non_blocking
 	};
 }
 
-template<bool const Wait = true>
+template<bool const Wait = false>
 inline void executeImmediately(vk::Device const& __restrict device, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue, std::function<void(vk::CommandBuffer cb)> const func) { // const std::function<void (vk::CommandBuffer cb)> 
   vk::CommandBufferAllocateInfo const cbai{ commandPool, vk::CommandBufferLevel::ePrimary, 1 };
 
@@ -455,16 +455,15 @@ public:
   /// Set the default layers and extensions.
   InstanceMaker &defaultLayers() {
 #ifndef NDEBUG
-   layers_.push_back("VK_LAYER_KHRONOS_validation");
-
-	instance_extensions_.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+	layer("VK_LAYER_KHRONOS_validation");
+	extension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
     
-    #ifdef VKU_SURFACE
-      instance_extensions_.push_back(VKU_SURFACE);
-    #endif
-    instance_extensions_.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
-	instance_extensions_.push_back(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
+#ifdef VKU_SURFACE
+	extension(VKU_SURFACE);
+#endif
+	extension(VK_KHR_SURFACE_EXTENSION_NAME);
+	extension(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
     return *this;
   }
 
@@ -475,8 +474,8 @@ public:
   }
 
   /// Add an extension. eg. VK_EXT_DEBUG_UTILS_EXTENSION_NAME
-  InstanceMaker &extension(const char *layer) {
-    instance_extensions_.push_back(layer);
+  InstanceMaker &extension(const char * extension) {
+    instance_extensions_.push_back(extension);
     return *this;
   }
 
@@ -568,10 +567,10 @@ public:
   /// Set the default layers and extensions.
   DeviceMaker &defaultLayers() {
 #ifndef NDEBUG
-    layers_.push_back("VK_LAYER_LUNARG_standard_validation");
-	layers_.push_back("VK_LAYER_LUNARG_assistant_layer");
+	layer("VK_LAYER_LUNARG_standard_validation");
+	layer("VK_LAYER_LUNARG_assistant_layer");
 #endif
-    device_extensions_.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+	extension(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     return *this;
   }
 
@@ -582,8 +581,8 @@ public:
   }
 
   /// Add an extension. eg. VK_EXT_DEBUG_UTILS_EXTENSION_NAME
-  DeviceMaker &extension(const char *layer) {
-    device_extensions_.push_back(layer);
+  DeviceMaker &extension(const char *extension) {
+    device_extensions_.push_back(extension);
     return *this;
   }
 
@@ -1487,17 +1486,14 @@ public:
 	  ci.size = maxsizebytes_ = size;
 	  ci.usage = usage;
 	  ci.sharingMode = vk::SharingMode::eExclusive;
-
+	 
 	  VmaAllocationCreateInfo allocInfo{};
 	  allocInfo.usage = gpu_usage ? gpu_usage : VMA_MEMORY_USAGE_GPU_ONLY;  // default to gpu only if 0/unknown is passed in
 	  allocInfo.requiredFlags = (VkMemoryPropertyFlags)memflags;
 	  //allocInfo.preferredFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
 	  allocInfo.flags = (bDedicatedMemory ? VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT : (VmaAllocationCreateFlags)0)
 					  | (bPersistantMapping ? VMA_ALLOCATION_CREATE_MAPPED_BIT : (VmaAllocationCreateFlags)0);
-
-	  if (VMA_MEMORY_USAGE_CPU_ONLY == allocInfo.usage) {
-		  allocInfo.flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT; // for cpu memory, always require dedicated memory - prevents data being overwritten in adjacent buffers in a pool of memory
-	  }
+	  allocInfo.alignment = VMA_MEMORY_USAGE_CPU_ONLY == gpu_usage ? CACHE_LINE_BYTES : 0; // bugfix: only for CPU ONLY BUFFERS - for avoiding false sharing on the copies into this buffer. 
 
 	  vmaCreateBuffer(vma_, (VkBufferCreateInfo const* const)&ci, &allocInfo, (VkBuffer*)&buffer_, &allocation_, &mem_);
   }
@@ -1642,7 +1638,7 @@ public:
 	bActiveDelta = (activesizebytes_ != size);
 	activesizebytes_ = size;
 
-    vku::executeImmediately(device, commandPool, queue, [&](vk::CommandBuffer cb) {
+    vku::executeImmediately<true>(device, commandPool, queue, [&](vk::CommandBuffer cb) {
       vk::BufferCopy bc{ 0, 0, size};
       cb.copyBuffer(tmp.buffer(), buffer_, bc);
     });
@@ -2378,7 +2374,7 @@ public:
 	  stagingBuffer.updateLocal<T>(bytes, size);
 
 	  // Copy the staging buffer to the GPU texture and set the layout.
-	  vku::executeImmediately(device, commandPool, queue, [&](vk::CommandBuffer cb) {
+	  vku::executeImmediately<true>(device, commandPool, queue, [&](vk::CommandBuffer cb) {
 		  auto bp = getBlockParams(s.info.format);
 		  vk::Buffer buf = stagingBuffer.buffer();
 		  uint32_t offset = 0;
@@ -3670,7 +3666,7 @@ public:
 	stagingBuffer.updateLocal(pFileBegin + baseOffset, totalActualSize);
 
     // Copy the staging buffer to the GPU texture and set the layout.
-    vku::executeImmediately(device, commandPool, queue, [&](vk::CommandBuffer cb) {
+    vku::executeImmediately<true>(device, commandPool, queue, [&](vk::CommandBuffer cb) {
       vk::Buffer buf = stagingBuffer.buffer();
       for (uint32_t mipLevel = 0; mipLevel != mipLevels(); ++mipLevel) {
         auto width = this->width(mipLevel); 

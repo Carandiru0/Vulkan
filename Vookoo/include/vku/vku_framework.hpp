@@ -56,6 +56,7 @@
 #include <set>
 
 #ifdef VKU_IMPLEMENTATION
+#include <queue>
 #include <Utility/async_long_task.h>
 
 #endif
@@ -85,6 +86,22 @@ public:
 	im.engineVersion(1);
 	im.apiVersion(apiVersion);
 
+	// add additonal extensions
+	auto const eps = vk::enumerateInstanceExtensionProperties().value;
+	for (auto const& i : eps)
+	{
+		// if instance extension is available, add it. 
+
+		if (bHDRExtensionEnabled) {
+			// VK_EXT_swapchain_colorspace
+			if (std::string_view(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME) == std::string_view(i.extensionName)) {
+				im.extension(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME);
+				bExtendedColorspaceOn = true;
+			}
+		}
+	}
+
+	// finally, create the actual instance //
     instance_ = im.createUnique();
 
 #ifndef NDEBUG
@@ -251,10 +268,17 @@ public:
 
 	// Optional/Additional Extensions & detailed configuration if required by extension//
 #if defined(FULLSCREEN_EXCLUSIVE) && defined(VK_EXT_full_screen_exclusive)
-	
-	ADD_EXTENSION(extensions, dm, VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME, supported);
-	bFullScreenExclusiveExtensionSupported = supported;
-	
+	if (bFullScreenExclusiveExtensionEnabled) {
+		ADD_EXTENSION(extensions, dm, VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME, supported);
+		bFullScreenExclusiveExtensionSupported = supported;
+	}
+#endif
+
+#if defined(VK_EXT_hdr_metadata)
+	if (bHDRExtensionEnabled & bExtendedColorspaceOn) {
+		ADD_EXTENSION(extensions, dm, VK_EXT_HDR_METADATA_EXTENSION_NAME, supported);
+		bHDRExtensionSupported = supported;
+	}
 #endif
 
 	// Create ****QUEUES**** //
@@ -369,11 +393,31 @@ public:
   Framework &operator=(Framework &&rhs) = default;
 
   // extensions supported ? //
+  bool const isFullScreenExclusiveExtensionSupported() const {
+	  return(bFullScreenExclusiveExtensionEnabled & bFullScreenExclusiveExtensionSupported);
+  }
   void setFullScreenExclusiveEnabled(bool const bEnabled) {
 	  bFullScreenExclusiveExtensionEnabled = bEnabled;
   }
-  bool const isFullScreenExclusiveExtensionSupported() const {
-	  return(bFullScreenExclusiveExtensionEnabled & bFullScreenExclusiveExtensionSupported);
+
+
+  bool const isHDRExtensionSupported() const {
+	  return(bHDRExtensionEnabled & bHDRExtensionSupported);
+  }
+  uint32_t const getMaximumNits() const {
+	  return(max_hdr_monitor_nits);
+  }
+  void setHDREnabled(bool const bEnabled, uint32_t const max_nits) {
+
+	  if (bEnabled && 0 != max_nits) // prevent zero max nits being a valid state while hdr is enabled.
+	  {
+		  bHDRExtensionEnabled = true;
+		  max_hdr_monitor_nits = max_nits;
+	  }
+	  else {
+		  bHDRExtensionEnabled = false;
+		  max_hdr_monitor_nits = 0;
+	  }
   }
 
   /// Returns true if the Framework has been built correctly.
@@ -395,6 +439,11 @@ private:
   // extensions supported ? //
   bool bFullScreenExclusiveExtensionEnabled = false,
 	   bFullScreenExclusiveExtensionSupported = false;
+
+  uint32_t max_hdr_monitor_nits = 0u;
+  bool bExtendedColorspaceOn = false,
+	   bHDRExtensionEnabled = false,
+	   bHDRExtensionSupported = false;
 
   bool ok_ = false;
 };
@@ -516,8 +565,10 @@ public:
   {
 	  fmt::print(fg(fmt::color::lime_green), "creating swapchain.... " "\n");
 
-	  vk::SurfaceCapabilities2KHR surfaceCaps;
+	  vk::SurfaceCapabilities2KHR surfaceCaps{};
 	  vk::PhysicalDeviceSurfaceInfo2KHR surfaceInfo(surface_);
+
+	  surfaceCaps.pNext = nullptr; // safe
 
 #if defined(FULLSCREEN_EXCLUSIVE) && defined(VK_EXT_full_screen_exclusive)
 	  vk::SurfaceFullScreenExclusiveWin32InfoEXT full_screen_exclusive_win32(monitor_);
@@ -543,18 +594,16 @@ public:
 
 #if defined(FULLSCREEN_EXCLUSIVE) && defined(VK_EXT_full_screen_exclusive)
 	  if (monitor_ && fw_.isFullScreenExclusiveExtensionSupported()) {
-		  bFullScreenExclusiveSupported = surfaceCapFullscreenExclusive.fullScreenExclusiveSupported;
-		  if (bFullScreenExclusiveSupported) {
-			  fmt::print(fg(fmt::color::lime_green), "fullscreen exclusive supported\n");
-		  }
-		  else {
-			  fmt::print(fg(fmt::color::orange), "fullscreen exclusive not supported\n"); // allow loading to continue, will still work just not optimal
+		  bFullScreenExclusiveOn = surfaceCapFullscreenExclusive.fullScreenExclusiveSupported;
+		  if (bFullScreenExclusiveOn) {
+			  fmt::print(fg(fmt::color::lime_green), "fullscreen exclusive\n");
 		  }
 	  }
 	  else { // Extension doesn't exist or user settings ini has disabled exclusivity, silently fail/disable exclusive fullscreen
-		  bFullScreenExclusiveSupported = false;
+		  bFullScreenExclusiveOn = false;
 	  }
 #endif
+
 	  auto fmts = physicalDevice_.getSurfaceFormats2KHR(surfaceInfo).value;
 	  // default to first format
 	  swapchainImageFormat_ = fmts[0].surfaceFormat.format;
@@ -567,20 +616,21 @@ public:
 	  }
 	  else { // otherwise find optimal format
 
-		  bool bHDR(false);
-
-		  // search for 10bit target *** no longer using hdr, rather just regular srgb and 10bit color
-		  for (auto& fmt : fmts) {
-			  if (fmt.surfaceFormat.format == vk::Format::eA2R10G10B10UnormPack32 && fmt.surfaceFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear ) {
-				  swapchainImageFormat_ = fmt.surfaceFormat.format;
-				  swapchainColorSpace_ = fmt.surfaceFormat.colorSpace;
-				  bHDR = true;
-				  break;
+		  // search for 10bit HDR target
+		  if (bFullScreenExclusiveOn & fw_.isHDRExtensionSupported()) { // if fullscreen exclusive is on (enabled & supported & turned on) only. HDR does not work in windowed mode properly unless "Windows HDR" is toggled on in settings for the users computer
+			  for (auto& fmt : fmts) {									// But there is no way of query the state of "Windows HDR" being on for the application. So if Windows HDR is off, then the windowed mode with hdr on here would be incorrect.
+																		// however, if fullscreen exclusive is on (default), then HDR can be properly controlled within the application.
+				  if (fmt.surfaceFormat.format == vk::Format::eA2R10G10B10UnormPack32 && fmt.surfaceFormat.colorSpace == vk::ColorSpaceKHR::eHdr10St2084EXT) {
+					  swapchainImageFormat_ = fmt.surfaceFormat.format;
+					  swapchainColorSpace_ = fmt.surfaceFormat.colorSpace;
+					  bHDROn = true;
+					  break;
+				  }
 			  }
 		  }
 
 		  // if no 10 bit target exists,
-		  if (!bHDR) { // search for preferred 8bit target
+		  if (!bHDROn) { // search for preferred 8bit target
 			  for (auto& fmt : fmts) {
 				  if (fmt.surfaceFormat.format == vk::Format::eB8G8R8A8Unorm && fmt.surfaceFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
 					  swapchainImageFormat_ = fmt.surfaceFormat.format;
@@ -591,11 +641,11 @@ public:
 		  }
 	  }
 
-	  if (swapchainImageFormat_ == vk::Format::eA2R10G10B10UnormPack32 && swapchainColorSpace_ == vk::ColorSpaceKHR::eSrgbNonlinear) {
-		  fmt::print(fg(fmt::color::lime_green), "10bit Backbuffer");
+	  if (swapchainImageFormat_ == vk::Format::eA2R10G10B10UnormPack32 && swapchainColorSpace_ == vk::ColorSpaceKHR::eHdr10St2084EXT) {
+		  fmt::print(fg(fmt::color::lime_green), "10bit Backbuffer - HDR10");
 	  }
 	  else if (swapchainImageFormat_ == vk::Format::eB8G8R8A8Unorm && swapchainColorSpace_ == vk::ColorSpaceKHR::eSrgbNonlinear) {
-		  fmt::print(fg(fmt::color::lime_green), "8bit Backbuffer");
+		  fmt::print(fg(fmt::color::lime_green), "8bit Backbuffer - SRGB");
 	  }
 	  else {
 		  fmt::print(fg(fmt::color::red), "[FAIL] No compatible backbuffer format / color space found!");
@@ -652,13 +702,9 @@ public:
 	  swapinfo.oldSwapchain = (swapchain_ ? *swapchain_ : vk::SwapchainKHR{});
 
 #if defined(FULLSCREEN_EXCLUSIVE) && defined(VK_EXT_full_screen_exclusive)
-
-	  if (bFullScreenExclusiveSupported) {
-
+	  if (bFullScreenExclusiveOn) {
 		  swapinfo.pNext = &full_screen_exclusive;
-
 	  }
-
 #endif
 
 	  // release old image views if they exists
@@ -708,50 +754,52 @@ public:
 		  }
 	  } checkData[eCheckerboard::_size()];
 
+	  // temporary renderpass ###############################################################################################################
+	  vk::UniqueRenderPass renderPass_checkered;
+
+	  // Build the renderpass using two attachments, colour and depth/stencil. (regular rendering pass)
+	  {
+		  vku::RenderpassMaker rpm;
+
+		  // The stencil attachment.
+		  rpm.attachmentBegin(stencilCheckerboard_[0].format());		// 0  // same format used for even and odd
+		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);
+		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eDontCare);
+		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eDontCare);
+		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
+		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eStore);
+		  rpm.attachmentInitialLayout(vk::ImageLayout::eDepthReadOnlyStencilAttachmentOptimal);
+		  rpm.attachmentFinalLayout(vk::ImageLayout::eDepthStencilReadOnlyOptimal);
+
+		  // A subpass to render using the above attachment
+		  rpm.subpassBegin(vk::PipelineBindPoint::eGraphics);
+		  rpm.subpassDepthStencilAttachment(vk::ImageLayout::eDepthReadOnlyStencilAttachmentOptimal, 0);	// optimal format (read/write) during subpass
+
+		  // A dependency to reset the layout of both attachments.
+		  rpm.dependencyBegin(VK_SUBPASS_EXTERNAL, 0);
+		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eTopOfPipe);
+		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
+		  rpm.dependencySrcAccessMask((vk::AccessFlags)0);
+		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentWrite);
+		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
+
+		  rpm.dependencyBegin(0, VK_SUBPASS_EXTERNAL);
+		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
+		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
+		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentWrite);
+		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentRead);
+		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
+
+		  // Use the maker object to construct the vulkan object
+		  renderPass_checkered = rpm.createUnique(device_);
+	  }
+
 	  vku::ShaderModule const vert_{ device_, SHADER_PATH SHADER_POSTQUAD };
 
 	  for (uint32_t odd = 0; odd < eCheckerboard::_size(); ++odd)
 	  {
-		  // temporary renderpass & framebuffer ###################################################################################################
-		  vk::UniqueRenderPass renderPass_checkered;
+		  // temporary framebuffer ###############################################################################################################
 		  vk::UniqueFramebuffer frameBuffer_checkered;
-
-		  // Build the renderpass using two attachments, colour and depth/stencil. (regular rendering pass)
-		  {
-			  vku::RenderpassMaker rpm;
-
-			  // The stencil attachment.
-			  rpm.attachmentBegin(stencilCheckerboard_[odd].format());		// 0
-			  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);
-			  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eDontCare);
-			  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eDontCare);
-			  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
-			  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eStore);
-			  rpm.attachmentInitialLayout(vk::ImageLayout::eDepthReadOnlyStencilAttachmentOptimal);					
-			  rpm.attachmentFinalLayout(vk::ImageLayout::eDepthStencilReadOnlyOptimal);
-
-			  // A subpass to render using the above attachment
-			  rpm.subpassBegin(vk::PipelineBindPoint::eGraphics);
-			  rpm.subpassDepthStencilAttachment(vk::ImageLayout::eDepthReadOnlyStencilAttachmentOptimal, 0);	// optimal format (read/write) during subpass
-
-			  // A dependency to reset the layout of both attachments.
-			  rpm.dependencyBegin(VK_SUBPASS_EXTERNAL, 0);
-			  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eTopOfPipe);
-			  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
-			  rpm.dependencySrcAccessMask((vk::AccessFlags)0);
-			  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentWrite);
-			  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
-
-			  rpm.dependencyBegin(0, VK_SUBPASS_EXTERNAL);
-			  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
-			  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
-			  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentWrite);
-			  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentRead);
-			  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
-
-			  // Use the maker object to construct the vulkan object
-			  renderPass_checkered = rpm.createUnique(device_);
-		  }
 
 		  point2D const frameBufferSz(width_,height_);
 		  point2D_t const downResFrameBufferSz(vku::getDownResolution(frameBufferSz));
@@ -759,7 +807,6 @@ public:
 		  vk::ImageView const attachments[1] = { stencilCheckerboard_[odd].imageView() };
 		  vk::FramebufferCreateInfo const fbci{ {}, *renderPass_checkered, _countof(attachments), attachments, uint32_t(downResFrameBufferSz.x), uint32_t(downResFrameBufferSz.y), 1 };
 		  frameBuffer_checkered = device_.createFramebufferUnique(fbci).value;
-
 
 
 		  // temporary pipeline ###################################################################################################################
@@ -846,9 +893,10 @@ public:
 		  });
 
 		  frameBuffer_checkered.release();
-		  renderPass_checkered.release();
 
 	  } // for
+
+	  renderPass_checkered.release();
 
 	  // final layout is transitioned for both odd and even stencil checkerboard at end of renderpass to eDepthStencilReadOnlyOptimal by renderpass automatically
 	  // no further transitions needed or allowed
@@ -2079,7 +2127,6 @@ public:
 		}
   }
   
-//#define VKU_IMPLEMENTATION // debugging enable ONLY to get proper brightness/colors when editing
 #ifdef VKU_IMPLEMENTATION
 
   private:
@@ -2094,6 +2141,7 @@ public:
 		  case vk::Result::eSuboptimalKHR:	// silently recreate the swap chain, then pre-acquire first image, reset image and resource indices
 		  case vk::Result::eErrorOutOfDateKHR:
 		  {
+			  ClipCursor(nullptr);  // bugfix, release cursor //
 			  device_.waitIdle();	// safetly continue after idle detect
 			  recreateSwapChain();
 
@@ -2103,6 +2151,7 @@ public:
 		  }
 		  break;
 		  default:
+			  ClipCursor(nullptr);  // bugfix, release cursor //
 			  FMT_LOG_FAIL(GPU_LOG, "Major failure in main render method, < {:s} > ", vk::to_string(result));
 			  break;
 		  };
@@ -2116,11 +2165,17 @@ public:
   void draw(const vk::Device& __restrict device,
 	  compute_function gpu_compute, dynamic_renderpass_function dynamic_function, overlay_renderpass_function overlay_function) {
 
-	  static constexpr uint64_t const umax = nanoseconds(milliseconds(500)).count();
+	  // [ RENDERGRAPH ]-------------------------------------------------------------------------------------------------------------
+	  //  
+	  // 	   
+	  // [ COMPUTE (TEXTURESHADERS) ] -------------------------------------| 
+	  // [ UPLOAD (LIGHT) ] ---------------[ COMPUTE (LIGHT) ]----------------[ STATIC ]-----[ OVERLAY ]-----[ POST & PRESENT ]
+	  // [ UPLOAD (DYNAMIC + OVERLAY) ] -----------------------------------|
+	  //
+	  // 
 
 	  // utilize the time between a present() and acquireNextImage()
-
-	  // ######## Acquire *currentframe* //
+	  static constexpr uint64_t const umax = nanoseconds(milliseconds(500)).count();
 
 	  static uint32_t
 		  resource_index{};		// **** only "compute, dynamic, post_submit_render" should use the resource_index, otherwise use imageIndex ******
@@ -2131,140 +2186,160 @@ public:
 	  // ###################################################### //
 	  async_long_task::wait<background_critical>(present_task_id, "present");  // bugfix: absolutely critical that this is done here, any other location results in validation THREADING errors
 	  // ####################################################### //
-	  vk::SubmitInfo submit{};
+	  
+	  int64_t
+		  task_compute_textures(0),
+		  task_compute_light(0);
 
-	  // COMPUTE SUBMIT //
+	  // COMPUTE SUBMIT (TEXTURESHADERS)// // **waiting on nothing
 	  vk::Semaphore const ctexSema = { *semaphores[resource_index].computeCompleteSemaphore_[eComputeBuffers::COMPUTE_TEXTURE - 1] };
 	  {
-		  vk::CommandBuffer const compute_process[3] = { nullptr, nullptr, *computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_TEXTURE][resource_index] };
+		  task_compute_textures = async_long_task::enqueue<background_critical>(
+			  // non-blocking submit
+			  [=] {
+				  vk::CommandBuffer const compute_process[3] = { nullptr, nullptr, *computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_TEXTURE][resource_index] };
 
-		  vk::Fence const compute_fence = computeDrawBuffers_.fence[eComputeBuffers::COMPUTE_TEXTURE][resource_index];
-		  if (computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_TEXTURE][resource_index]) {
-			  device.waitForFences(compute_fence, VK_TRUE, umax);
-			  device.resetFences(compute_fence);
-			  computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_TEXTURE][resource_index] = false; // reset
-		  }
+				  vk::Fence const compute_fence = computeDrawBuffers_.fence[eComputeBuffers::COMPUTE_TEXTURE][resource_index];
+				  if (computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_TEXTURE][resource_index]) {
+					  device.waitForFences(compute_fence, VK_TRUE, umax);
+					  device.resetFences(compute_fence);
+					  computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_TEXTURE][resource_index] = false; // reset
+				  }
 
-		  gpu_compute(std::forward<compute_pass&& __restrict>({ compute_process[eComputeBuffers::TRANSFER_LIGHT], compute_process[eComputeBuffers::COMPUTE_LIGHT], compute_process[eComputeBuffers::COMPUTE_TEXTURE], resource_index }));    // compute part resets the dirty state that transfer set
+				  gpu_compute(std::forward<compute_pass&& __restrict>({ compute_process[eComputeBuffers::TRANSFER_LIGHT], compute_process[eComputeBuffers::COMPUTE_LIGHT], compute_process[eComputeBuffers::COMPUTE_TEXTURE], resource_index }));    // compute part resets the dirty state that transfer set
 
-		  //vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eComputeShader };
+				  //vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eComputeShader };
+				  vk::SubmitInfo submit{};
+				  submit.waitSemaphoreCount = 0;
+				  submit.pWaitSemaphores = nullptr;				// **waiting on nothing
+				  submit.pWaitDstStageMask = nullptr;
+				  submit.commandBufferCount = 1;
+				  submit.pCommandBuffers = &compute_process[eComputeBuffers::COMPUTE_TEXTURE];				// submitting compute cb
+				  submit.signalSemaphoreCount = 1;
+				  submit.pSignalSemaphores = &ctexSema;			// signalling compute cb completion
 
-		  submit.waitSemaphoreCount = 0;
-		  submit.pWaitSemaphores = nullptr;				// waiting on nothing
-		  submit.pWaitDstStageMask = nullptr;
-		  submit.commandBufferCount = 1;
-		  submit.pCommandBuffers = &compute_process[eComputeBuffers::COMPUTE_TEXTURE];				// submitting compute cb
-		  submit.signalSemaphoreCount = 1;
-		  submit.pSignalSemaphores = &ctexSema;			// signalling compute cb completion
-		  computeQueue_[!resource_index].submit(1, &submit, compute_fence); // always use "other" compute queue so they potentially can be running independently and in parallel
+				  computeQueue_[!resource_index].submit(1, &submit, compute_fence); // always use "other" compute queue so they potentially can be running independently and in parallel
 
-		  computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_TEXTURE][resource_index] = true;
+				  computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_TEXTURE][resource_index] = true;
+
+			  });
 	  }
 
+	  // UPLOAD (LIGHT) // // **waiting on nothing
 	  vk::Semaphore const tcSema[2] = { *semaphores[resource_index].transferCompleteSemaphore_[0], *semaphores[resource_index].transferCompleteSemaphore_[1] };
-	  
+
 	  {
-		  vk::Fence const dma_transfer_light_fence = computeDrawBuffers_.fence[eComputeBuffers::TRANSFER_LIGHT][resource_index];
-		  if (computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index]) {
-			  device.waitForFences(dma_transfer_light_fence, VK_TRUE, umax);			// protect
-			  device.resetFences(dma_transfer_light_fence);
-			  computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = false; // reset
-		  }
+		vk::Fence const dma_transfer_light_fence = computeDrawBuffers_.fence[eComputeBuffers::TRANSFER_LIGHT][resource_index];
+		if (computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index]) {
+			device.waitForFences(dma_transfer_light_fence, VK_TRUE, umax);			// protect
+			device.resetFences(dma_transfer_light_fence);
+			computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = false; // reset
+		}
 
-		  vk::CommandBuffer const compute_upload_light[3] = { *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER_LIGHT][resource_index], nullptr, nullptr };
+		vk::CommandBuffer const compute_upload_light[3] = { *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER_LIGHT][resource_index], nullptr, nullptr };
 
-		  if (!computeCommandsDirty_[resource_index])  // only if not dirty already
-		  {
-			  // upload light
-			  computeCommandsDirty_[resource_index] = gpu_compute(std::forward<compute_pass&& __restrict>({ compute_upload_light[eComputeBuffers::TRANSFER_LIGHT], compute_upload_light[eComputeBuffers::COMPUTE_LIGHT], compute_upload_light[eComputeBuffers::COMPUTE_TEXTURE], resource_index }));
-		  }
+		if (!computeCommandsDirty_[resource_index])  // only if not dirty already
+		{
+			// upload light
+			computeCommandsDirty_[resource_index] = gpu_compute(std::forward<compute_pass&& __restrict>({ compute_upload_light[eComputeBuffers::TRANSFER_LIGHT], compute_upload_light[eComputeBuffers::COMPUTE_LIGHT], compute_upload_light[eComputeBuffers::COMPUTE_TEXTURE], resource_index }));
+		}
 
-		  // COMPUTE DMA TRANSFER SUBMIT //
-		  if (computeCommandsDirty_[resource_index]) {									// seperated queue sb,it for transfering light and opacity
-																						  // so compute only waits on transfer light semaphore, and static waits on opacity semaphore
-																							// rather than compute waiting on combined transfer of both light + opacity. Compute only dependent on light.
-			  submit.waitSemaphoreCount = 0;
-			  submit.pWaitSemaphores = nullptr;
-			  submit.pWaitDstStageMask = nullptr;
-			  submit.commandBufferCount = 1;				// submitting dma cb
-			  submit.pCommandBuffers = &compute_upload_light[eComputeBuffers::TRANSFER_LIGHT];
-			  submit.signalSemaphoreCount = 1;
-			  submit.pSignalSemaphores = &tcSema[0];			// signal for compute
+		// COMPUTE DMA TRANSFER SUBMIT //
+		if (computeCommandsDirty_[resource_index]) {									// seperated queue sb,it for transfering light and opacity
+																						// so compute only waits on transfer light semaphore, and static waits on opacity semaphore
+			vk::SubmitInfo submit{};																			// rather than compute waiting on combined transfer of both light + opacity. Compute only dependent on light.
+			submit.waitSemaphoreCount = 0;
+			submit.pWaitSemaphores = nullptr;			// **waiting on nothing
+			submit.pWaitDstStageMask = nullptr;
+			submit.commandBufferCount = 1;				// submitting dma cb
+			submit.pCommandBuffers = &compute_upload_light[eComputeBuffers::TRANSFER_LIGHT];
+			submit.signalSemaphoreCount = 1;
+			submit.pSignalSemaphores = &tcSema[0];			// signal for compute
 
-			  transferQueue_[resource_index].submit(1, &submit, dma_transfer_light_fence);
+			transferQueue_[resource_index].submit(1, &submit, dma_transfer_light_fence);
 
-			  computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = true;
-		  }
-	  }
+			computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = true;
+		}
+	  } 
 
-
-	  // ######### Prepare *currentFrame* //
+	  // UPLOAD & OVERLAY // // **waiting on nothing
 	  vk::Fence const overlay_fence = overlayDrawBuffers_.fence[eOverlayBuffers::TRANSFER][0];   /// <---- this is zero on purpose rather than resource index
 	  {																							 //  bugfix for flickering of voxels & gui!
-		  vk::CommandBuffer do_cb[2] = { *dynamicDrawBuffers_.cb[0][resource_index], *overlayDrawBuffers_.cb[eOverlayBuffers::TRANSFER][resource_index] };
+		vk::CommandBuffer do_cb[2] = { *dynamicDrawBuffers_.cb[0][resource_index], *overlayDrawBuffers_.cb[eOverlayBuffers::TRANSFER][resource_index] };
 
-		  vk::Fence const dynamic_fence = dynamicDrawBuffers_.fence[0][resource_index];
-		  
-			{ // ######### begin overlay transfer cb update (spawned)
-				device.waitForFences(overlay_fence, VK_TRUE, umax);				// protect // overlay fence is overlay Render cb
-				device.resetFences(overlay_fence);
+		vk::Fence const dynamic_fence = dynamicDrawBuffers_.fence[0][resource_index];
 
-				// staging
-				overlay_function(std::forward<overlay_renderpass&& __restrict>({ &do_cb[1], nullptr, std::forward<vk::RenderPassBeginInfo&& __restrict>(vk::RenderPassBeginInfo{}) }));		// submission of staged data to gpu // build transfer cb
-			}
+		{ // ######### begin overlay transfer cb update (spawned)
+			device.waitForFences(overlay_fence, VK_TRUE, umax);				// protect // overlay fence is overlay Render cb
+			device.resetFences(overlay_fence);
 
-			{ // ######### begin dynamic transfer cb update (main thread)
-				device.waitForFences(dynamic_fence, VK_TRUE, umax);		// protect
-				device.resetFences(dynamic_fence);
+			// staging
+			overlay_function(std::forward<overlay_renderpass&& __restrict>({ &do_cb[1], nullptr, std::forward<vk::RenderPassBeginInfo&& __restrict>(vk::RenderPassBeginInfo{}) }));		// submission of staged data to gpu // build transfer cb
+		}
 
-				dynamic_function(std::forward<dynamic_renderpass&&>({ do_cb[0], resource_index }));	// submission of staged data to gpu
-			}
+		{ // ######### begin dynamic transfer cb update (main thread)
+			device.waitForFences(dynamic_fence, VK_TRUE, umax);		// protect
+			device.resetFences(dynamic_fence);
+
+			dynamic_function(std::forward<dynamic_renderpass&&>({ do_cb[0], resource_index }));	// submission of staged data to gpu
+		}
 
 		// DYNAMIC & OVERLAY DYNAMIC SUBMIT //
-		  {
-			  submit.waitSemaphoreCount = 0;
-			  submit.pWaitSemaphores = nullptr;
-			  submit.pWaitDstStageMask = nullptr;
-			  submit.commandBufferCount = 2;				// submitting dynamic cb & overlay's dynamic cb
-			  submit.pCommandBuffers = do_cb;
-			  submit.signalSemaphoreCount = 1;
-			  submit.pSignalSemaphores = &tcSema[1];			// signal for dynamic cb in slot 0, signal for overlay dynamic cb in slot 1 (completion)
+		{
+			vk::SubmitInfo submit{};
+			submit.waitSemaphoreCount = 0;
+			submit.pWaitSemaphores = nullptr;				// **waiting on nothing
+			submit.pWaitDstStageMask = nullptr;
+			submit.commandBufferCount = 2;				// submitting dynamic cb & overlay's dynamic cb
+			submit.pCommandBuffers = do_cb;
+			submit.signalSemaphoreCount = 1;
+			submit.pSignalSemaphores = &tcSema[1];			// signal for dynamic cb in slot 0, signal for overlay dynamic cb in slot 1 (completion)
 
-			  transferQueue_[!resource_index].submit(1, &submit, dynamic_fence); // <---- this is opposite transfer queue on purpose so dma transfers are simultaneous
-		  }
+			transferQueue_[!resource_index].submit(1, &submit, dynamic_fence); // <---- this is opposite transfer queue on purpose so dma transfers are simultaneous
+		}
 	  }
 
-	  // COMPUTE SUBMIT //
+	  // COMPUTE SUBMIT // // **waiting on upload light
 	  vk::Semaphore const cSema = { *semaphores[resource_index].computeCompleteSemaphore_[eComputeBuffers::COMPUTE_LIGHT - 1] };
 	  bool bAsyncCompute(false);
 
 	  if (computeCommandsDirty_[resource_index]) {
-		  vk::CommandBuffer const compute_process[3] = { nullptr, *computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_LIGHT][resource_index], nullptr };
-		  
-		  vk::Fence const compute_fence = computeDrawBuffers_.fence[eComputeBuffers::COMPUTE_LIGHT][resource_index];
-		  if (computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index]) {
-			  device.waitForFences(compute_fence, VK_TRUE, umax);
-			  device.resetFences(compute_fence);
-			  computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index] = false; // reset
-		  }
-		  
-		  computeCommandsDirty_[resource_index] = gpu_compute(std::forward<compute_pass&& __restrict>({ compute_process[eComputeBuffers::TRANSFER_LIGHT], compute_process[eComputeBuffers::COMPUTE_LIGHT], compute_process[eComputeBuffers::COMPUTE_TEXTURE], resource_index }));    // compute part resets the dirty state that transfer set
 
-		  vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eComputeShader };
+		  task_compute_light = async_long_task::enqueue<background_critical>(
+			  // non-blocking submit
+			  [=, &bAsyncCompute] {
+				  vk::CommandBuffer const compute_process[3] = { nullptr, *computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_LIGHT][resource_index], nullptr };
 
-		  submit.waitSemaphoreCount = (uint32_t)computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index];
-		  submit.pWaitSemaphores = &tcSema[0];				// waiting on transfer completion only if transfer in progress, otherwise waiting on nothing
-		  submit.pWaitDstStageMask = &waitStages;
-		  submit.commandBufferCount = 1;
-		  submit.pCommandBuffers = &compute_process[eComputeBuffers::COMPUTE_LIGHT];				// submitting compute cb
-		  submit.signalSemaphoreCount = 1;
-		  submit.pSignalSemaphores = &cSema;			// signalling compute cb completion
-		  computeQueue_[resource_index].submit(1, &submit, compute_fence);
+				  vk::Fence const compute_fence = computeDrawBuffers_.fence[eComputeBuffers::COMPUTE_LIGHT][resource_index];
+				  if (computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index]) {
+					  device.waitForFences(compute_fence, VK_TRUE, umax);
+					  device.resetFences(compute_fence);
+					  computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index] = false; // reset
+				  }
 
-		  computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index] = true;
-		  bAsyncCompute = true;
+				  computeCommandsDirty_[resource_index] = gpu_compute(std::forward<compute_pass&& __restrict>({ compute_process[eComputeBuffers::TRANSFER_LIGHT], compute_process[eComputeBuffers::COMPUTE_LIGHT], compute_process[eComputeBuffers::COMPUTE_TEXTURE], resource_index }));    // compute part resets the dirty state that transfer set
+
+				  vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eComputeShader };
+
+				  vk::SubmitInfo submit{};
+				  submit.waitSemaphoreCount = (uint32_t)computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index];
+				  submit.pWaitSemaphores = &tcSema[0];				// waiting on transfer completion only if transfer in progress, otherwise waiting on nothing
+				  submit.pWaitDstStageMask = &waitStages;
+				  submit.commandBufferCount = 1;
+				  submit.pCommandBuffers = &compute_process[eComputeBuffers::COMPUTE_LIGHT];				// submitting compute cb
+				  submit.signalSemaphoreCount = 1;
+				  submit.pSignalSemaphores = &cSema;			// signalling compute cb completion
+				  computeQueue_[resource_index].submit(1, &submit, compute_fence);
+
+				  computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index] = true;
+				  bAsyncCompute = true;
+			  });
 	  }
 
+	  // upload & compute
+	  // 	   |
+	  // 	graphics
+	  
 	  //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%//
 	  // ANY WORK THAT CAN BE DONE (COMPUTE, TRANSFERS, ANYTHING THAT DOES NOT DEPEND ON IMAGEINDEX) SHOULD BE DONE ABOVE //
 	  //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%//
@@ -2282,70 +2357,93 @@ public:
 	  }
 	  //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%//
 
-	vk::Semaphore const iatexctccSema[4] = { iaSema, ctexSema, tcSema[1], cSema };
+    async_long_task::wait<background_critical>(task_compute_textures, "compute textureshaders");
+    async_long_task::wait<background_critical>(task_compute_light, "compute light");
 
-	// STATIC SUBMIT //
-	{
-		vk::Fence const static_fence = staticDrawBuffers_.fence[0][imageIndex];
-
-		device.waitForFences(static_fence, VK_TRUE, umax);
-		device.resetFences(static_fence);
-		if (staticCommandsDirty_[imageIndex]) {
-			setStaticCommands(staticCommandCache, imageIndex);
-		}
-
-		vk::CommandBuffer const cb = *staticDrawBuffers_.cb[0][imageIndex];
-		vk::PipelineStageFlags waitStages[4] = { vk::PipelineStageFlagBits::eVertexInput, vk::PipelineStageFlagBits::eVertexInput, vk::PipelineStageFlagBits::eFragmentShader, vk::PipelineStageFlagBits::eFragmentShader }; // wait at stage data is required
-
-		submit.waitSemaphoreCount = 3 + (uint32_t)bAsyncCompute;
-		submit.pWaitSemaphores = iatexctccSema;		// waiting on dynamic transfer & input acquire & compute processing (both texture and light)
-		submit.pWaitDstStageMask = waitStages;
-		submit.commandBufferCount = 1;
-		submit.pCommandBuffers = &cb;				// submitting static cb
-		submit.signalSemaphoreCount = 0;
-		submit.pSignalSemaphores = nullptr;			// signalling static cb completion
-		
-		// ########### FRAMES FIRST USAGE OF GRAPHICS QUEUE ################ //
-		graphicsQueue_.submit(1, &submit, static_fence);
-	}
-
-	// OVERLAY STATIC SUBMIT //
-	{
-		vk::CommandBuffer ob = *overlayDrawBuffers_.cb[eOverlayBuffers::RENDER][imageIndex];
-
-		// fence not required ....
-		static vk::ClearValue const clearArray[] = { {}, {}, {}, {}, vk::ClearValue{ std::array<uint32_t, 4>{0, 0, 0, 0}}, {} };
-		overlay_function(overlay_renderpass{ nullptr, &ob, 
-			std::forward<vk::RenderPassBeginInfo&& __restrict>(vk::RenderPassBeginInfo(*overlayPass_, *framebuffers_[eFrameBuffers::COLOR_DEPTH][imageIndex], vk::Rect2D{ {0, 0}, {width_, height_} }, _countof(clearArray), clearArray)) });  // build render cb
-
-		submit.waitSemaphoreCount = 0;				// waiting on overlay's dynamic cb (slot 0) completion and static cb (slot 1) completion
-		submit.pWaitSemaphores = nullptr;			// prior submit already waited on &tcSema[1] (contains semaphor that represents dynamic + overlay transfer)
-		submit.pWaitDstStageMask = nullptr;
-		submit.commandBufferCount = 1;
-		submit.pCommandBuffers = &ob;				// submitting overlay's static cb
-		submit.signalSemaphoreCount = 0;
-		submit.pSignalSemaphores = nullptr;			// signalling commands complete
-		graphicsQueue_.submit(1, &submit, overlay_fence);	// ***overlay fence is reset here ok
-	}
-
-	// PRESENT (POST AA) FINAL SUBMIT //
 	vk::Semaphore const ccSema = *semaphores[resource_index].commandCompleteSemaphore_;
-	{
-		vk::Fence const cbFencePresent = presentDrawBuffers_.fence[0][imageIndex];
-		device.waitForFences(cbFencePresent, VK_TRUE, umax);
-		device.resetFences(cbFencePresent);				// have to wait on associatted fence, and reset for next iteration
 
-		vk::CommandBuffer const pb = *presentDrawBuffers_.cb[0][imageIndex];
+	int64_t const task_graphics = async_long_task::enqueue<background_critical>(
+		// non-blocking submit
+		[=] {
+			vk::Semaphore const iatexctccSema[4] = { iaSema, ctexSema, tcSema[1], cSema };
 
-		submit.waitSemaphoreCount = 0;				
-		submit.pWaitSemaphores = nullptr;			
-		submit.pWaitDstStageMask = nullptr;
-		submit.commandBufferCount = 1;
-		submit.pCommandBuffers = &pb;				// submitting presents' static cb
-		submit.signalSemaphoreCount = 1;
-		submit.pSignalSemaphores = &ccSema;			// signalling commands complete
-		graphicsQueue_.submit(1, &submit, cbFencePresent);
-	}
+			// STATIC SUBMIT // // **waiting on input acquire, textureshaders, upload & overlay, compute light
+			{
+				vk::Fence const static_fence = staticDrawBuffers_.fence[0][imageIndex];
+
+				device.waitForFences(static_fence, VK_TRUE, umax);
+				device.resetFences(static_fence);
+				if (staticCommandsDirty_[imageIndex]) {
+					setStaticCommands(staticCommandCache, imageIndex);
+				}
+
+				vk::CommandBuffer const cb = *staticDrawBuffers_.cb[0][imageIndex];
+				vk::PipelineStageFlags waitStages[4] = { vk::PipelineStageFlagBits::eVertexInput, vk::PipelineStageFlagBits::eVertexInput, vk::PipelineStageFlagBits::eFragmentShader, vk::PipelineStageFlagBits::eFragmentShader }; // wait at stage data is required
+
+				vk::SubmitInfo submit{};
+				submit.waitSemaphoreCount = 3 + (uint32_t)bAsyncCompute;
+				submit.pWaitSemaphores = iatexctccSema;		// waiting on dynamic transfer & input acquire & compute processing (both texture and light)
+				submit.pWaitDstStageMask = waitStages;
+				submit.commandBufferCount = 1;
+				submit.pCommandBuffers = &cb;				// submitting static cb
+				submit.signalSemaphoreCount = 0;
+				submit.pSignalSemaphores = nullptr;			// signalling static cb completion
+
+				// ########### FRAMES FIRST USAGE OF GRAPHICS QUEUE ################ //
+				graphicsQueue_.submit(1, &submit, static_fence);
+			}
+
+			//	graphics
+			// 	   |
+			// 	graphics
+
+			// **inherent wait between graphics queue operations. they serialize and it is not neccessary to signal a semaphore as there is no inter-queue dependencies.
+
+			// OVERLAY STATIC SUBMIT // **waiting on overlay upload is not necessary as the wait has already taken place in static. The semaphore combines dynamic upload + overlay upload. Static depends on dynamic uploads completion. Single semaphore. Single signal & wait finished in STATIC.
+			{
+				vk::CommandBuffer ob = *overlayDrawBuffers_.cb[eOverlayBuffers::RENDER][imageIndex];
+
+				// fence not required ....
+				static vk::ClearValue const clearArray[] = { {}, {}, {}, {}, vk::ClearValue{ std::array<uint32_t, 4>{0, 0, 0, 0}}, {} };
+				overlay_function(overlay_renderpass{ nullptr, &ob,
+					std::forward<vk::RenderPassBeginInfo&& __restrict>(vk::RenderPassBeginInfo(*overlayPass_, *framebuffers_[eFrameBuffers::COLOR_DEPTH][imageIndex], vk::Rect2D{ {0, 0}, {width_, height_} }, _countof(clearArray), clearArray)) });  // build render cb
+
+				vk::SubmitInfo submit{};
+				submit.waitSemaphoreCount = 0;
+				submit.pWaitSemaphores = nullptr;			// prior submit already waited on &tcSema[1] (contains semaphor that represents dynamic + overlay transfer)
+				submit.pWaitDstStageMask = nullptr;
+				submit.commandBufferCount = 1;
+				submit.pCommandBuffers = &ob;				// submitting overlay's static cb
+				submit.signalSemaphoreCount = 0;
+				submit.pSignalSemaphores = nullptr;			// signalling commands complete
+				graphicsQueue_.submit(1, &submit, overlay_fence);	// ***overlay fence is reset here ok
+			}
+
+			//	graphics
+			// 	   |
+			// 	graphics
+
+			// PRESENT (POST AA) FINAL SUBMIT // **waiting on nothing
+			{
+				vk::Fence const cbFencePresent = presentDrawBuffers_.fence[0][imageIndex];
+				device.waitForFences(cbFencePresent, VK_TRUE, umax);
+				device.resetFences(cbFencePresent);				// have to wait on associatted fence, and reset for next iteration
+
+				vk::CommandBuffer const pb = *presentDrawBuffers_.cb[0][imageIndex];
+
+				vk::SubmitInfo submit{};
+				submit.waitSemaphoreCount = 0;
+				submit.pWaitSemaphores = nullptr;
+				submit.pWaitDstStageMask = nullptr;
+				submit.commandBufferCount = 1;
+				submit.pCommandBuffers = &pb;				// submitting presents' static cb
+				submit.signalSemaphoreCount = 1;
+				submit.pSignalSemaphores = &ccSema;			// signalling commands complete
+				graphicsQueue_.submit(1, &submit, cbFencePresent);
+			}
+		});
+
+	async_long_task::wait<background_critical>(task_graphics, "graphics");
 
 	present_task_id = async_long_task::enqueue<background_critical>(
 	// non-blocking present
@@ -2383,7 +2481,7 @@ public:
   ~Window() {
 
 #if defined(FULLSCREEN_EXCLUSIVE) && defined(VK_EXT_full_screen_exclusive)
-	  if (bFullScreenExclusiveSupported) {
+	  if (bFullScreenExclusiveOn) {
 		  vkReleaseFullScreenExclusiveModeEXT(device_, *swapchain_);
 	  }
 #endif
@@ -2464,22 +2562,22 @@ public:
   vk::ColorSpaceKHR swapchainColorSpace() const { return swapchainColorSpace_; }
 
   /// Return the swapchain object
-  const vk::SwapchainKHR swapchain() const { return *swapchain_; }
+  vk::SwapchainKHR const& __restrict swapchain() const { return(*swapchain_); }
 
   /// Return the views of the swap chain images
-  const std::vector<vk::ImageView> &imageViews() const { return imageViews_; }
+  std::vector<vk::ImageView> const& __restrict imageViews() const { return(imageViews_); }
 
   /// Return the swap chain images
-  const std::vector<vk::Image> &images() const { return images_; }
+  std::vector<vk::Image> const& __restrict images() const { return(images_); }
 
   /// Return a defult command Pool to use to create new command buffers.
-  vk::CommandPool const& commandPool(eCommandPools const index) const { return(*commandPool_[index]); }
+  vk::CommandPool const& __restrict commandPool(eCommandPools const index) const { return(*commandPool_[index]); }
 
   /// Return the number of swap chain images.
   int numImageIndices() const { return (int)images_.size(); }
 
-  bool const isFullScreenExclusiveSupported() const { return(bFullScreenExclusiveSupported); }
-
+  bool const isFullScreenExclusive() const { return(bFullScreenExclusiveOn); }
+  bool const isHDR() const { return(bHDROn); }
 
 private:
 	vk::Queue 
@@ -2561,14 +2659,14 @@ private:
   vk::PhysicalDevice physicalDevice_;
   HMONITOR monitor_ = nullptr;
   bool vsyncDisabled_ = false;
-
   bool ok_ = false;
 
   std::vector<bool> staticCommandsDirty_;
   bool computeCommandsDirty_[2] = { false };
  
-  // extensions enabled ? //
-  bool bFullScreenExclusiveSupported = false;
+  // extensions enabled & active ? //
+  bool bFullScreenExclusiveOn = false;
+  bool bHDROn = false;
 };
 
 } // namespace vku

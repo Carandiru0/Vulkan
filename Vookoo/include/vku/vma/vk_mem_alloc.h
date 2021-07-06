@@ -2473,6 +2473,10 @@ typedef struct VmaAllocationCreateInfo
     `usage`, `requiredFlags`, `preferredFlags`, `memoryTypeBits` are ignored.
     */
     VmaPool pool;
+
+    // *** added custom "over-alignment" (optional)
+    VkDeviceSize alignment;
+
     /** \brief Custom general-purpose pointer that will be stored in #VmaAllocation, can be read as VmaAllocationInfo::pUserData and changed using vmaSetAllocationUserData().
     
     If #VMA_ALLOCATION_CREATE_USER_DATA_COPY_STRING_BIT is used, it must be either
@@ -17870,6 +17874,8 @@ VMA_CALL_PRE VkResult VMA_CALL_POST vmaCreateBuffer(
         bool prefersDedicatedAllocation  = false;
         allocator->GetBufferMemoryRequirements(*pBuffer, vkMemReq,
             requiresDedicatedAllocation, prefersDedicatedAllocation);
+
+        vkMemReq.alignment = VMA_MAX(vkMemReq.alignment, pAllocationCreateInfo->alignment); // adding custom over-alignment
 
         // Make sure alignment requirements for specific buffer usages reported
         // in Physical Device Properties are included in alignment reported by memory requirements.
