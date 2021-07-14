@@ -37,6 +37,13 @@ namespace vkNames
 		[[maybe_unused]] static inline constexpr char const* const ZPASS = "[rp] Z";
 	}
 
+	namespace Queue
+	{
+		[[maybe_unused]] static inline constexpr char const* const GRAPHICS = "[q] Graphics";
+		[[maybe_unused]] static inline constexpr char const* const COMPUTE = "[q] Compute";
+		[[maybe_unused]] static inline constexpr char const* const TRANSFER = "[q] Transfer";
+	}
+
 	namespace Image
 	{
 		[[maybe_unused]] static inline constexpr char const* const colorImage = "[img] colorImage";
@@ -61,6 +68,17 @@ namespace vkNames
 		[[maybe_unused]] static inline constexpr char const* const LightMapHistory_DistanceDirection = "[img] LightMapHistory_DistanceDirection";
 		[[maybe_unused]] static inline constexpr char const* const LightMapHistory_Color = "[img] LightMapHistory_Color";
 		[[maybe_unused]] static inline constexpr char const* const OpacityMap = "[img] OpacityMap";
+	}
+
+	namespace Buffer
+	{
+		[[maybe_unused]] static inline constexpr char const* const SUBGROUP_LAYER_COUNT = "[buf] Subgroup Layer Count";
+		[[maybe_unused]] static inline constexpr char const* const SHARED = "[buf] Shared";
+		[[maybe_unused]] static inline constexpr char const* const TERRAIN = "[buf] Terrain";
+		[[maybe_unused]] static inline constexpr char const* const ROAD = "[buf] Road"; 
+		[[maybe_unused]] static inline constexpr char const* const VOXEL_STATIC = "[buf] Voxel Static"; 
+		[[maybe_unused]] static inline constexpr char const* const VOXEL_DYNAMIC = "[buf] Voxel Dynamic";
+		[[maybe_unused]] static inline constexpr char const* const VOXEL_SHARED_UNIFORM = "[buf] Voxel Shared Uniform";
 	}
 }; // end ns
 

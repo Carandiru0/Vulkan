@@ -643,7 +643,7 @@ public:
 
   DebugCallback(
     vk::Instance instance,
-    vk::DebugUtilsMessageSeverityFlagsEXT severityFlags =
+    vk::DebugUtilsMessageSeverityFlagsEXT const severityFlags =
       vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
       vk::DebugUtilsMessageSeverityFlagBitsEXT::eError
   ) : instance_(instance) {
@@ -753,6 +753,8 @@ private:
 	  else {
 		  --iReplicateCnt;
 	  }
+	  //DebugBreak();
+
     return VK_FALSE;
   }
   vk::DebugUtilsMessengerEXT messenger_;
@@ -1549,6 +1551,26 @@ public:
 	  bActiveDelta = (size != activesizebytes_);
 	  activesizebytes_ = size;
   }
+  void createAsGPUBuffer(vk::Device device, vk::CommandPool commandPool, vk::Queue queue, vk::DeviceSize const maxsize) // good for gpu->gpu copies, used to reset buffers shared_buffer & subgroup_layer_count_max
+  {
+	  if (maxsize == 0) return;
+	  using buf = vk::BufferUsageFlagBits;
+	  using pfb = vk::MemoryPropertyFlagBits;
+
+	  if (0 == maxsizebytes()) { // only allocate once
+		  *this = vku::GenericBuffer(buf::eTransferSrc | buf::eTransferDst, maxsize); // device local, gpu only buffer
+		  activesizebytes_ = maxsizebytes();
+
+		  // upload temporary staging buffer to clear
+		  vku::GenericBuffer tmp(buf::eTransferSrc, maxsize, pfb::eHostCoherent | pfb::eHostVisible, VMA_MEMORY_USAGE_CPU_ONLY, false, false);
+		  tmp.clearLocal();
+
+		  vku::executeImmediately<true>(device, commandPool, queue, [&](vk::CommandBuffer cb) {
+			  vk::BufferCopy bc{ 0, 0, maxsize };
+			  cb.copyBuffer(tmp.buffer(), buffer_, bc);
+		  });
+	  }
+  }
   void createAsStagingBuffer(vk::DeviceSize const maxsize, bool const bPersistantMapping = false)
   {
 	  if (maxsize == 0) return;
@@ -1558,6 +1580,7 @@ public:
 	  if (0 == maxsizebytes()) { // only allocate once
 		  *this = vku::GenericBuffer(buf::eTransferSrc, maxsize, pfb::eHostCoherent | pfb::eHostVisible, VMA_MEMORY_USAGE_CPU_ONLY, false, bPersistantMapping);
 		  activesizebytes_ = maxsizebytes();
+		  clearLocal();
 	  }
   }
   // intended for use with frame work's dynamic command buffer
@@ -2070,9 +2093,9 @@ class DescriptorSetUpdater {
 public:
   DescriptorSetUpdater(int const maxBuffers = MAX_NUM_STORAGE_BUFFERS, int const maxImages = MAX_NUM_IMAGES, int const maxBufferViews = MAX_NUM_BUFFER_VIEWS) {
     // we must pre-size these buffers as we take pointers to their members.
-    bufferInfo_.resize(maxBuffers);
-    imageInfo_.resize(maxImages);
-    bufferViews_.resize(maxBufferViews);
+	bufferInfo_.reserve(maxBuffers); bufferInfo_.resize(maxBuffers);
+	imageInfo_.reserve(maxImages); imageInfo_.resize(maxImages);
+	bufferViews_.reserve(maxBufferViews); bufferViews_.resize(maxBufferViews);
   }
 
   /// Call this to begin a new descriptor set.
@@ -2098,6 +2121,9 @@ public:
       descriptorWrites_.back().descriptorCount++;
       imageInfo_[numImages_++] = vk::DescriptorImageInfo{sampler, imageView, imageLayout};
     } else {
+#ifndef NDEBUG
+		fmt::print(fg(fmt::color::red), "\n limit reached, cap of {:d} images\n", numImages_);
+#endif
       ok_ = false;
     }
   }
@@ -2120,6 +2146,9 @@ public:
       descriptorWrites_.back().descriptorCount++;
       bufferInfo_[numBuffers_++] = vk::DescriptorBufferInfo{buffer, offset, range};
     } else {
+#ifndef NDEBUG
+		fmt::print(fg(fmt::color::red), "\n limit reached, cap of {:d} buffers\n", numBuffers_);
+#endif
       ok_ = false;
     }
   }
@@ -2142,6 +2171,9 @@ public:
       descriptorWrites_.back().descriptorCount++;
       bufferViews_[numBufferViews_++] = view;
     } else {
+#ifndef NDEBUG
+		fmt::print(fg(fmt::color::red), "\n limit reached, cap of {:d} buffer views\n", numBufferViews_);
+#endif
       ok_ = false;
     }
   }
@@ -2529,7 +2561,7 @@ public:
 	  case il::eColorAttachmentOptimal: srcMask = afb::eColorAttachmentWrite; srcStageMask = psfb::eColorAttachmentOutput; dependencyFlags = vk::DependencyFlagBits::eByRegion; break;
 	  case il::eDepthStencilAttachmentOptimal: srcMask = afb::eDepthStencilAttachmentWrite; srcStageMask = psfb::eEarlyFragmentTests | psfb::eLateFragmentTests; dependencyFlags = vk::DependencyFlagBits::eByRegion; break;
 	  case il::eDepthStencilReadOnlyOptimal: srcMask = afb::eDepthStencilAttachmentRead; srcStageMask = psfb::eEarlyFragmentTests | psfb::eLateFragmentTests; dependencyFlags = vk::DependencyFlagBits::eByRegion; break;
-	  case il::eShaderReadOnlyOptimal: srcMask = afb::eShaderRead; srcStageMask = psfb::eFragmentShader; /*assumes frag shader*/ dependencyFlags = vk::DependencyFlagBits::eByRegion; break;
+	  case il::eShaderReadOnlyOptimal: srcMask = afb::eShaderRead; srcStageMask = psfb::eFragmentShader | psfb::eComputeShader; /*assumes frag or compute shader*/ dependencyFlags = vk::DependencyFlagBits::eByRegion; break;
 	  case il::eTransferSrcOptimal: srcMask = afb::eTransferRead; srcStageMask = psfb::eTransfer;  break;
 	  case il::eTransferDstOptimal: srcMask = afb::eTransferWrite; srcStageMask = psfb::eTransfer; break;
 	  case il::ePreinitialized: srcMask = afb::eTransferWrite | afb::eHostWrite; break;

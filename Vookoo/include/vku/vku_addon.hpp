@@ -65,12 +65,12 @@ namespace vku
 namespace vku {
 
 	/* These constants are defined in vku_addon.hpp */ // vku.hpp line ~1550 for debuging when these constants are exceeded
-	static constexpr uint32_t const
-		MAX_NUM_DESCRIPTOR_SETS = 15,
+	static constexpr uint32_t const // **even numbers only**
+		MAX_NUM_DESCRIPTOR_SETS = 24,
 		MAX_NUM_UNIFORM_BUFFERS = 8,
-		MAX_NUM_IMAGES = 80,
-		MAX_NUM_STORAGE_BUFFERS = 10,
-		MAX_NUM_BUFFER_VIEWS = 1;
+		MAX_NUM_IMAGES = 132,
+		MAX_NUM_STORAGE_BUFFERS = 24,
+		MAX_NUM_BUFFER_VIEWS = 2;
 
 	static constexpr int32_t const
 		ACCESS_READONLY(0),
@@ -166,6 +166,8 @@ namespace vku {
 
 	typedef struct {
 		vk::CommandBuffer cb;
+		uint32_t resource_index;
+
 		vk::RenderPassBeginInfo&& __restrict rpbiZ;
 		vk::RenderPassBeginInfo&& __restrict rpbiHalf;
 		vk::RenderPassBeginInfo&& __restrict rpbiFull;
@@ -186,6 +188,8 @@ namespace vku {
 	typedef struct {
 		vk::CommandBuffer* __restrict cb_transfer;
 		vk::CommandBuffer* __restrict cb_render;
+		uint32_t resource_index;
+
 		vk::RenderPassBeginInfo&& __restrict rpbi;
 		
 	} overlay_renderpass;
@@ -194,8 +198,10 @@ namespace vku {
 
 	typedef struct {
 		vk::CommandBuffer cb;
+		uint32_t resource_index;
+
 		vk::RenderPassBeginInfo&& __restrict rpbi;
-		uint32_t image_index;
+
 	} present_renderpass;
 	typedef void(*const present_renderpass_function)(present_renderpass&& __restrict);
 
