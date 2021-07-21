@@ -66,6 +66,7 @@ namespace vkNames
 		[[maybe_unused]] static inline constexpr char const* const LightMap_DistanceDirection = "[img] LightMap_DistanceDirection";
 		[[maybe_unused]] static inline constexpr char const* const LightMap_Color = "[img] LightMap_Color";
 		[[maybe_unused]] static inline constexpr char const* const LightMapHistory_DistanceDirection = "[img] LightMapHistory_DistanceDirection";
+		[[maybe_unused]] static inline constexpr char const* const LightMapHistory_Reflection = "[img] LightMapHistory_Reflection";
 		[[maybe_unused]] static inline constexpr char const* const LightMapHistory_Color = "[img] LightMapHistory_Color";
 		[[maybe_unused]] static inline constexpr char const* const OpacityMap = "[img] OpacityMap";
 	}

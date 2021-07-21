@@ -19,6 +19,7 @@
 #define VKU_HPP
 
 #pragma intrinsic(memcpy)
+#pragma intrinsic(memset)
 
 #define VK_NO_PROTOTYPES
 #include "volk/volk.h"
@@ -1495,12 +1496,9 @@ public:
 	  //allocInfo.preferredFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
 	  allocInfo.flags = (bDedicatedMemory ? VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT : (VmaAllocationCreateFlags)0)
 					  | (bPersistantMapping ? VMA_ALLOCATION_CREATE_MAPPED_BIT : (VmaAllocationCreateFlags)0);
-	  allocInfo.alignment = VMA_MEMORY_USAGE_CPU_ONLY == gpu_usage ? CACHE_LINE_BYTES : 0; // bugfix: only for CPU ONLY BUFFERS - for avoiding false sharing on the copies into this buffer. 
 
 	  vmaCreateBuffer(vma_, (VkBufferCreateInfo const* const)&ci, &allocInfo, (VkBuffer*)&buffer_, &allocation_, &mem_);
   }
-#pragma intrinsic(memcpy)
-#pragma intrinsic(memset)
 
   // for clearing staging buffers
   __SAFE_BUF void clearLocal() const {
@@ -2631,20 +2629,27 @@ public:
   }
 
   // For specifying the specific source and destination stages  vk::PipelineStageFlagBits (advanced usage):
+  template< bool const bDontCareSrcUndefined = false>
   void setLayout(vk::CommandBuffer const& __restrict cb, vk::ImageLayout newLayout, vk::PipelineStageFlags srcStageMask, int32_t const AccessUsed, vk::PipelineStageFlags dstStageMask, int32_t const AccessRequired, vk::ImageAspectFlags aspectMask = vk::ImageAspectFlagBits::eColor, vk::ImageLayout const ForceLayoutUpdate = vk::ImageLayout::eUndefined) {
 
 	  vk::ImageLayout oldLayout;
 
-	  if (vk::ImageLayout::eUndefined == ForceLayoutUpdate) {
-		  if (newLayout == s.currentLayout && AccessUsed == AccessRequired) return;
-
-		  oldLayout = s.currentLayout;
+	  if constexpr (bDontCareSrcUndefined) {
+		  oldLayout = vk::ImageLayout::eUndefined;
+		  srcStageMask = vk::PipelineStageFlagBits::eTopOfPipe;
 	  }
 	  else {
-		  if (vk::ImageLayout::eUndefined != s.currentLayout)
-			  oldLayout = ForceLayoutUpdate;
-		  else
+		  if (vk::ImageLayout::eUndefined == ForceLayoutUpdate) {
+			  if (newLayout == s.currentLayout && AccessUsed == AccessRequired) return;
+
 			  oldLayout = s.currentLayout;
+		  }
+		  else {
+			  if (vk::ImageLayout::eUndefined != s.currentLayout)
+				  oldLayout = ForceLayoutUpdate;
+			  else
+				  oldLayout = s.currentLayout;
+		  }
 	  }
 
 	  s.currentLayout = newLayout;
@@ -2732,20 +2737,26 @@ public:
   /// Change the layout of this image using a memory barrier. (simple automatic usage - covers most cases)
   // ForceLayoutUpdate s good for recording those pesky cbs hat wont set the layout properly due to this classes state tracking
   // ForceLayoutUpdate should be set to the expected OLD layout being transitioned from
+  template< bool const bDontCareSrcUndefined = false>
   void setLayout(vk::CommandBuffer const& __restrict cb, vk::ImageLayout newLayout, vk::ImageAspectFlags aspectMask = vk::ImageAspectFlagBits::eColor, vk::ImageLayout const ForceLayoutUpdate = vk::ImageLayout::eUndefined) {
     
 	  vk::ImageLayout oldLayout;
 
-	  if (vk::ImageLayout::eUndefined == ForceLayoutUpdate) {
-		  if (newLayout == s.currentLayout) return;
-
-		  oldLayout = s.currentLayout;
+	  if constexpr (bDontCareSrcUndefined) {
+		  oldLayout = vk::ImageLayout::eUndefined;
 	  }
 	  else {
-		  if (vk::ImageLayout::eUndefined != s.currentLayout )
-			oldLayout = ForceLayoutUpdate;
-		  else
-			oldLayout = s.currentLayout;
+		  if (vk::ImageLayout::eUndefined == ForceLayoutUpdate) {
+			  if (newLayout == s.currentLayout) return;
+
+			  oldLayout = s.currentLayout;
+		  }
+		  else {
+			  if (vk::ImageLayout::eUndefined != s.currentLayout)
+				  oldLayout = ForceLayoutUpdate;
+			  else
+				  oldLayout = s.currentLayout;
+		  }
 	  }
     
 	s.currentLayout = newLayout;
@@ -2805,9 +2816,9 @@ public:
 
   // batched / multiple barriers stages src and dst are same for all images in batch
   // For specifying the specific source and destination stages  vk::PipelineStageFlagBits (advanced usage):
-  template<size_t const image_count>
+  template<size_t const image_count, bool const bDontCareSrcUndefined = false>
   static void setLayout(std::array<vku::GenericImage* const, image_count> const& __restrict images, 
-	  vk::CommandBuffer const& __restrict cb, vk::ImageLayout const newLayout, vk::PipelineStageFlags const srcStageMask, int32_t const AccessUsed, vk::PipelineStageFlags const dstStageMask, int32_t const AccessRequired, vk::ImageAspectFlags const aspectMask = vk::ImageAspectFlagBits::eColor, vk::ImageLayout const ForceLayoutUpdate = vk::ImageLayout::eUndefined) {
+	  vk::CommandBuffer const& __restrict cb, vk::ImageLayout const newLayout, vk::PipelineStageFlags srcStageMask, int32_t const AccessUsed, vk::PipelineStageFlags const dstStageMask, int32_t const AccessRequired, vk::ImageAspectFlags const aspectMask = vk::ImageAspectFlagBits::eColor, vk::ImageLayout const ForceLayoutUpdate = vk::ImageLayout::eUndefined) {
 
 	  vk::DependencyFlags dependencyFlags{};
 	  std::array<vk::ImageMemoryBarrier, image_count> imbs;
@@ -2817,16 +2828,22 @@ public:
 
 		  vk::ImageLayout oldLayout;
 
-		  if (vk::ImageLayout::eUndefined == ForceLayoutUpdate) {
-			  if (newLayout == images[i]->s.currentLayout && AccessUsed == AccessRequired) continue;
-
-			  oldLayout = images[i]->s.currentLayout;
+		  if constexpr (bDontCareSrcUndefined) {
+			  oldLayout = vk::ImageLayout::eUndefined;
+			  srcStageMask = vk::PipelineStageFlagBits::eTopOfPipe;
 		  }
 		  else {
-			  if (vk::ImageLayout::eUndefined != images[i]->s.currentLayout)
-				  oldLayout = ForceLayoutUpdate;
-			  else
+			  if (vk::ImageLayout::eUndefined == ForceLayoutUpdate) {
+				  if (newLayout == images[i]->s.currentLayout && AccessUsed == AccessRequired) continue;
+
 				  oldLayout = images[i]->s.currentLayout;
+			  }
+			  else {
+				  if (vk::ImageLayout::eUndefined != images[i]->s.currentLayout)
+					  oldLayout = ForceLayoutUpdate;
+				  else
+					  oldLayout = images[i]->s.currentLayout;
+			  }
 		  }
 
 		  images[i]->s.currentLayout = newLayout;
@@ -2913,6 +2930,18 @@ public:
 	  cb.pipelineBarrier(srcStageMask, dstStageMask, dependencyFlags, 0, nullptr, 0, nullptr, used_image_count, imbs.data());
   }
 
+  // **** use these for "undefined" / "don't care" source instances:
+  // 
+  // setlayout when the data is in a don't care state (undefined)
+  void setLayoutFromUndefined(vk::CommandBuffer const& __restrict cb, vk::ImageLayout const newLayout, vk::ImageAspectFlags const aspectMask = vk::ImageAspectFlagBits::eColor) {
+	  setLayout<true>(cb, newLayout, aspectMask);
+  }
+  // batched version
+  template<size_t const image_count>
+  static void setLayoutFromUndefined(std::array<vku::GenericImage* const, image_count> const& __restrict images,
+									 vk::CommandBuffer const& __restrict cb, vk::ImageLayout const newLayout, vk::PipelineStageFlags const dstStageMask, int32_t const AccessRequired, vk::ImageAspectFlags const aspectMask = vk::ImageAspectFlagBits::eColor) {
+	  GenericImage::setLayout<image_count, true>(images, cb, newLayout, vk::PipelineStageFlagBits::eTopOfPipe, 0/*N/A*/, dstStageMask, AccessRequired, aspectMask);
+  }
   /// Set what the image thinks is its current layout (ie. the old layout in an image barrier).
   void setCurrentLayout(vk::ImageLayout oldLayout) {
     s.currentLayout = oldLayout;
@@ -2939,10 +2968,6 @@ protected:
 	allocInfo.requiredFlags = (VkMemoryPropertyFlags)(hostImage ? (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	//allocInfo.preferredFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
 	allocInfo.flags = (bDedicatedMemory ? VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT : (VmaAllocationCreateFlags)0);
-
-	if (VMA_MEMORY_USAGE_CPU_ONLY == allocInfo.usage) {
-		allocInfo.flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT; // for cpu memory, always require dedicated memory - prevents data being overwritten in adjacent buffers in a pool of memory
-	}
 
 	VmaAllocationInfo image_alloc_info{};
 	vmaCreateImage(vma_, (VkImageCreateInfo const* const)&s.info, &allocInfo, (VkImage*)&s.image, &s.allocation, &image_alloc_info);

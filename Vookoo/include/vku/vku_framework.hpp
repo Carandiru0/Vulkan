@@ -2172,7 +2172,7 @@ public:
 	  // [ RENDERGRAPH ]-------------------------------------------------------------------------------------------------------------
 	  //  
 	  // 	   
-	  // [ COMPUTE (TEXTURESHADERS) ] -------------------------------------| 
+	  //                             [ COMPUTE (TEXTURESHADERS) ] ---------| 
 	  // [ UPLOAD (LIGHT) ] ---------------[ COMPUTE (LIGHT) ]----------------[ STATIC ]-----[ OVERLAY ]-----[ POST & PRESENT ]
 	  // [ UPLOAD (DYNAMIC + OVERLAY) ] -----------------------------------|
 	  //
@@ -2191,6 +2191,45 @@ public:
 	  async_long_task::wait<background_critical>(present_task_id, "present");  // bugfix: absolutely critical that this is done here, any other location results in validation THREADING errors
 	  // ####################################################### //
 	  
+	  vk::Semaphore const tcSema[2] = { *semaphores[resource_index].transferCompleteSemaphore_[0], *semaphores[resource_index].transferCompleteSemaphore_[1] };
+
+	  //----// UPLOAD & OVERLAY // // **waiting on nothing
+	  vk::Fence const overlay_fence = overlayDrawBuffers_.fence[eOverlayBuffers::TRANSFER][resource_index];   // bugfix: now properly double-buffered, no longer serializes frame by having 0 here instead of resource_index!
+	  {
+		  vk::CommandBuffer do_cb[2] = { *dynamicDrawBuffers_.cb[0][resource_index], *overlayDrawBuffers_.cb[eOverlayBuffers::TRANSFER][resource_index] };
+
+		  { // ######### begin overlay transfer cb update (spawned)
+			  device.waitForFences(overlay_fence, VK_TRUE, umax);				// protect // overlay fence is overlay Render cb
+			  device.resetFences(overlay_fence);
+
+			  // staging
+			  overlay_function(std::forward<overlay_renderpass&& __restrict>({ &do_cb[1], nullptr, resource_index, std::forward<vk::RenderPassBeginInfo&& __restrict>(vk::RenderPassBeginInfo{}) }));		// submission of staged data to gpu // build transfer cb
+		  }
+
+		  vk::Fence const dynamic_fence = dynamicDrawBuffers_.fence[0][resource_index];
+
+		  { // ######### begin dynamic transfer cb update (main thread)
+			  device.waitForFences(dynamic_fence, VK_TRUE, umax);		// protect
+			  device.resetFences(dynamic_fence);
+
+			  dynamic_function(std::forward<dynamic_renderpass&&>({ do_cb[0], resource_index }));	// submission of staged data to gpu
+		  }
+
+		  // DYNAMIC & OVERLAY DYNAMIC SUBMIT //
+		  {
+			  vk::SubmitInfo submit{};
+			  submit.waitSemaphoreCount = 0;
+			  submit.pWaitSemaphores = nullptr;				// **waiting on nothing
+			  submit.pWaitDstStageMask = nullptr;
+			  submit.commandBufferCount = 2;				// submitting dynamic cb & overlay's dynamic cb
+			  submit.pCommandBuffers = do_cb;
+			  submit.signalSemaphoreCount = 1;
+			  submit.pSignalSemaphores = &tcSema[1];			// signal for dynamic cb in slot 0, signal for overlay dynamic cb in slot 1 (completion)
+
+			  transferQueue_[!resource_index].submit(1, &submit, dynamic_fence); // <---- this is opposite transfer queue on purpose so dma transfers are simultaneous
+		  }
+	  }
+
 	  int64_t
 		  task_compute_textures(0),
 		  task_compute_light(0);
@@ -2233,8 +2272,6 @@ public:
 	  bool bAsyncCompute(false);
 
 //----// UPLOAD (LIGHT) // // **waiting on nothing
-	  vk::Semaphore const tcSema[2] = { *semaphores[resource_index].transferCompleteSemaphore_[0], *semaphores[resource_index].transferCompleteSemaphore_[1] };
-
 	  {
 			vk::Fence const dma_transfer_light_fence = computeDrawBuffers_.fence[eComputeBuffers::TRANSFER_LIGHT][resource_index];
 			if (computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index]) {
@@ -2296,43 +2333,6 @@ public:
 					});
 			}
 	  } 
-
-//----// UPLOAD & OVERLAY // // **waiting on nothing
-	  vk::Fence const overlay_fence = overlayDrawBuffers_.fence[eOverlayBuffers::TRANSFER][resource_index];   // bugfix: now properly double-buffered, no longer serializes frame by having 0 here instead of resource_index!
-	  {
-	    vk::CommandBuffer do_cb[2] = { *dynamicDrawBuffers_.cb[0][resource_index], *overlayDrawBuffers_.cb[eOverlayBuffers::TRANSFER][resource_index] };
-
-		{ // ######### begin overlay transfer cb update (spawned)
-			device.waitForFences(overlay_fence, VK_TRUE, umax);				// protect // overlay fence is overlay Render cb
-			device.resetFences(overlay_fence);
-
-			// staging
-			overlay_function(std::forward<overlay_renderpass&& __restrict>({ &do_cb[1], nullptr, resource_index, std::forward<vk::RenderPassBeginInfo&& __restrict>(vk::RenderPassBeginInfo{}) }));		// submission of staged data to gpu // build transfer cb
-		}
-
-		vk::Fence const dynamic_fence = dynamicDrawBuffers_.fence[0][resource_index];
-
-		{ // ######### begin dynamic transfer cb update (main thread)
-			device.waitForFences(dynamic_fence, VK_TRUE, umax);		// protect
-			device.resetFences(dynamic_fence);
-
-			dynamic_function(std::forward<dynamic_renderpass&&>({ do_cb[0], resource_index }));	// submission of staged data to gpu
-		}
-
-		// DYNAMIC & OVERLAY DYNAMIC SUBMIT //
-		{
-			vk::SubmitInfo submit{};
-			submit.waitSemaphoreCount = 0;
-			submit.pWaitSemaphores = nullptr;				// **waiting on nothing
-			submit.pWaitDstStageMask = nullptr;
-			submit.commandBufferCount = 2;				// submitting dynamic cb & overlay's dynamic cb
-			submit.pCommandBuffers = do_cb;
-			submit.signalSemaphoreCount = 1;
-			submit.pSignalSemaphores = &tcSema[1];			// signal for dynamic cb in slot 0, signal for overlay dynamic cb in slot 1 (completion)
-
-			transferQueue_[!resource_index].submit(1, &submit, dynamic_fence); // <---- this is opposite transfer queue on purpose so dma transfers are simultaneous
-		}
-	  }
 
 	  // upload & compute
 	  // 	   |
