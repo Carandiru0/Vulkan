@@ -867,7 +867,7 @@ public:
 		  // render checkerboard into stencil #########################################################################################################
 		  // must wait, device is only locked inside lambda. So any operations occuring on the main thread involving the device or queue
 		  // could be dangerous. This just so happens to occur at one of those times during init.
-		  vku::executeImmediately<true>(device_, commandPool, queue, [&](vk::CommandBuffer cb) {
+		  vku::executeImmediately(device_, commandPool, queue, [&](vk::CommandBuffer cb) {
 			
 			  VKU_SET_CMD_BUFFER_LABEL(cb, vkNames::CommandBuffer::CHECKERBOARD);
 
@@ -1009,7 +1009,7 @@ public:
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)offscreenImage_.resolved.image(), vkNames::Image::offscreenImage);
 
 		  
-		  vku::executeImmediately<true>(device, transientCommandPool, graphicsQueue_, [&](vk::CommandBuffer cb) {
+		  vku::executeImmediately(device, transientCommandPool, graphicsQueue_, [&](vk::CommandBuffer cb) {
 
 			  // never changes layout setup : //
 			  colorVolumetricDownResCheckeredImage().setLayout(cb, vk::ImageLayout::eGeneral);
@@ -2179,7 +2179,7 @@ public:
 	  // 
 
 	  // utilize the time between a present() and acquireNextImage()
-	  static constexpr uint64_t const umax = nanoseconds(milliseconds(500)).count();
+	  static constexpr uint64_t const umax = nanoseconds(milliseconds(async_long_task::beats::half)).count();
 
 	  static uint32_t
 		  resource_index{};		// **** only "compute, dynamic, post_submit_render" should use the resource_index, otherwise use imageIndex ******

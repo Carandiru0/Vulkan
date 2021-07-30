@@ -39,3 +39,4 @@ cmake_uninstall.cmake
 Rubbish
 vulkancapsviewer
 desktop.ini
+*.db

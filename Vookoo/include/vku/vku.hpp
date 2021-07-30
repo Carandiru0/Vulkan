@@ -14,7 +14,7 @@
 /// It should integrate with game engines nicely.
 //
 ////////////////////////////////////////////////////////////////////////////////
-
+#pragma once
 #ifndef VKU_HPP
 #define VKU_HPP
 
@@ -97,129 +97,22 @@ std::string format(const char *fmt, Args... args) {
   return(fmt::format(fmt, args));
 }
 
-// This addition to usage of executeImmediately allow asynchronous usage, decoupling the cpu and gpu from waiting.
-// It also allows for different queues to work simulataneously - remeber the limit on allocation for 4096 commands is the limit.
-// internal low-contention fair irdering mutexs are used.
-// optional template parameter for executeImmediately <Wait> defaults to false.
-// WARNING:: If consecutive executeImmediately operations depend on each other happening in any way, use the wait parameter to 
-// ensure depoendent operations happen in order. For example, consecutive operations that executeImmediately changes to a different
-// command pool. Since these could be dispatched simultaneously the order that they occur is undefined.
-// If they were not dependent on one occuring before the next, they could be queued at the same time, 
-// -- or used the same transient pool, they would be queued in a serial order.
-// Most of the time gpu operations can happen in parallel by usage of executeImmediately()
-// DO NOT USE IN THE REAL-TIME LOOP, THERE IS A GPU STALL CREATED (PIPELINE STALL). THERE IS ALSO A LIMIT OF 4096 ALLOCATION OPERATIONS
-// - ACCEPTABLE USAGE WOULD BE DURING LOADING, STARTUP, ETC. OR A *VERY* INFREQUENT EVENT. -
-namespace gpu_queue_non_blocking
-{
-	extern __declspec(selectany) inline tbb::concurrent_unordered_map<VkQueue const, tbb::queuing_rw_mutex*> _used_gpu_queues;  // **private internal usage only //
-	extern __declspec(selectany) inline tbb::queuing_rw_mutex _device_lock;
-
-	using root_lambda = std::function<void(vk::Device const& __restrict device, vk::Queue const& __restrict queue, vk::CommandBufferAllocateInfo const& __restrict cbai, std::function<void(vk::CommandBuffer cb)> const func)>;
-
-	/// Execute commands immediately and wait for the device to finish.
-	class lambda_task_gpu : public tbb::task {
-
-		vk::Device const& __restrict device;
-		vk::Queue const& __restrict queue;
-		vk::CommandBufferAllocateInfo const cbai;
-
-		std::function<void(vk::CommandBuffer cb)> const user_lambda;
-		root_lambda const lambda;
-
-		/*override*/ tbb::task* execute() {
-			lambda(device, queue, cbai, user_lambda);
-			return(nullptr);
-		}
-
-	public:
-		lambda_task_gpu(vk::Device const& __restrict device_, vk::Queue const& __restrict queue_, vk::CommandBufferAllocateInfo const& __restrict cbai_, std::function<void(vk::CommandBuffer cb)> const& f_, root_lambda const& l_)
-			: device(device_), queue(queue_), cbai(cbai_), user_lambda(f_), lambda(l_)
-		{}
-
-		STATIC_INLINE void enqueue(vk::Device const& __restrict device_, vk::Queue const& __restrict queue_, vk::CommandBufferAllocateInfo const& __restrict cbai_, std::function<void(vk::CommandBuffer cb)> const& f_, root_lambda const& l_) {
-			tbb::task::enqueue(*new(tbb::task::allocate_root()) lambda_task_gpu(device_, queue_, cbai_, f_, l_));
-		}
-	};
-}
-
-template<bool const Wait = false>
-inline void executeImmediately(vk::Device const& __restrict device, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue, std::function<void(vk::CommandBuffer cb)> const func) { // const std::function<void (vk::CommandBuffer cb)> 
+static inline void executeImmediately(vk::Device const& __restrict device, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue, std::function<void(vk::CommandBuffer cb)> const func) { // const std::function<void (vk::CommandBuffer cb)> 
   vk::CommandBufferAllocateInfo const cbai{ commandPool, vk::CommandBufferLevel::ePrimary, 1 };
 
-  if constexpr (Wait) {
+	auto const& cbs = device.allocateCommandBuffers(cbai).value;
 
-	  //tbb::queuing_rw_mutex::scoped_lock lock_allocate(gpu_queue_non_blocking::_device_lock);
-	  auto const cbs = device.allocateCommandBuffers(cbai).value;
-	  //lock_allocate.release();
+	cbs[0].begin(vk::CommandBufferBeginInfo{ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
+	func(cbs[0]);
+	cbs[0].end();
 
-	  cbs[0].begin(vk::CommandBufferBeginInfo{ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
-	  func(cbs[0]);
-	  cbs[0].end();
+	vk::SubmitInfo submit;
+	submit.commandBufferCount = (uint32_t)cbs.size();
+	submit.pCommandBuffers = cbs.data();
+	queue.submit(submit, vk::Fence{});
+	queue.waitIdle();
 
-	  vk::SubmitInfo submit;
-	  submit.commandBufferCount = (uint32_t)cbs.size();
-	  submit.pCommandBuffers = cbs.data();
-	  queue.submit(submit, vk::Fence{});
-	  queue.waitIdle();
-
-	  //tbb::queuing_rw_mutex::scoped_lock lock_free(gpu_queue_non_blocking::_device_lock);
-	  device.freeCommandBuffers(cbai.commandPool, cbs);
-  }
-  else {
-
-	  gpu_queue_non_blocking::lambda_task_gpu::enqueue(device, queue, cbai, func, [](vk::Device const& __restrict device, vk::Queue const& __restrict queue, vk::CommandBufferAllocateInfo const& __restrict cbai, std::function<void(vk::CommandBuffer cb)> const func)
-	  {
-		  
-		tbb::queuing_rw_mutex::scoped_lock lock_allocate(gpu_queue_non_blocking::_device_lock);
-		auto const cbs = device.allocateCommandBuffers(cbai).value;
-		lock_allocate.release();
-
-		cbs[0].begin(vk::CommandBufferBeginInfo{ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
-		func(cbs[0]);
-		cbs[0].end();
-
-		vk::SubmitInfo submit;
-		submit.commandBufferCount = (uint32_t)cbs.size();
-		submit.pCommandBuffers = cbs.data();
-
-		{ // only allow one task to submit to the queue, identical queues must not have simultaneous submission //
-			
-			tbb::queuing_rw_mutex owned_lock;
-			bool isOwner(false);
-
-			/*
-			auto it = gpu_queue_non_blocking::_used_gpu_queues.find(queue);
-			if (gpu_queue_non_blocking::_used_gpu_queues.cend() == it) {
-
-				// on first creation of adding this distinct queue, the owner of the lock is also set.
-				auto [it_emplaced, emplaced] = gpu_queue_non_blocking::_used_gpu_queues.emplace(queue, &owned_lock);
-				it = it_emplaced;
-				isOwner = true;
-			}
-			*/
-
-			// have valid iterator, queue always exists
-			// however the lock is released by the owner, so it could be nullptr
-			// this always ensures that there is atomically a valid lock with either an existing owner or a new one
-			// which could be this very instance.
-			tbb::queuing_rw_mutex*& obtained_lock(gpu_queue_non_blocking::_used_gpu_queues[queue]);
-			if (((int64_t)(_InterlockedCompareExchangePointer((PVOID volatile* )&obtained_lock, (PVOID)&owned_lock, nullptr))) == ((int64_t)(&owned_lock))) {
-				isOwner = true;
-			}
-
-			tbb::queuing_rw_mutex::scoped_lock lock(*obtained_lock);
-			queue.submit(submit, vk::Fence{});
-			queue.waitIdle();
-
-			if (isOwner) { // owners release the lock before it goes out of local scope and that are finished with the gpu task.
-				obtained_lock = nullptr; // a new owner will be assigned on the next instance for this distinct queue
-			}
-		}
-
-		tbb::queuing_rw_mutex::scoped_lock lock_free(gpu_queue_non_blocking::_device_lock);
-		device.freeCommandBuffers(cbai.commandPool, cbs);
-	});
-}
+	device.freeCommandBuffers(cbai.commandPool, cbs);
 }
 
 /// Scale a value by mip level, but do not reduce to zero.
@@ -548,7 +441,7 @@ public:
 	  // instance creation //
 	  instance = vk::createInstanceUnique(instanceInfo).value;
 	
-	volkLoadInstance(*instance); // volk
+	  volkLoadInstanceOnly(*instance); // volk
 
 	return(instance);
   }
@@ -1563,7 +1456,7 @@ public:
 		  vku::GenericBuffer tmp(buf::eTransferSrc, maxsize, pfb::eHostCoherent | pfb::eHostVisible, VMA_MEMORY_USAGE_CPU_ONLY, false, false);
 		  tmp.clearLocal();
 
-		  vku::executeImmediately<true>(device, commandPool, queue, [&](vk::CommandBuffer cb) {
+		  vku::executeImmediately(device, commandPool, queue, [&](vk::CommandBuffer cb) {
 			  vk::BufferCopy bc{ 0, 0, maxsize };
 			  cb.copyBuffer(tmp.buffer(), buffer_, bc);
 		  });
@@ -1659,7 +1552,7 @@ public:
 	bActiveDelta = (activesizebytes_ != size);
 	activesizebytes_ = size;
 
-    vku::executeImmediately<true>(device, commandPool, queue, [&](vk::CommandBuffer cb) {
+    vku::executeImmediately(device, commandPool, queue, [&](vk::CommandBuffer cb) {
       vk::BufferCopy bc{ 0, 0, size};
       cb.copyBuffer(tmp.buffer(), buffer_, bc);
     });
@@ -2404,7 +2297,7 @@ public:
 	  stagingBuffer.updateLocal<T>(bytes, size);
 
 	  // Copy the staging buffer to the GPU texture and set the layout.
-	  vku::executeImmediately<true>(device, commandPool, queue, [&](vk::CommandBuffer cb) {
+	  vku::executeImmediately(device, commandPool, queue, [&](vk::CommandBuffer cb) {
 		  auto bp = getBlockParams(s.info.format);
 		  vk::Buffer buf = stagingBuffer.buffer();
 		  uint32_t offset = 0;
@@ -2485,7 +2378,7 @@ public:
   void finalizeUpload(vk::Device const& __restrict device, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue,
 	  vk::ImageLayout const FinalLayout = vk::ImageLayout::eShaderReadOnlyOptimal) 
   {
-	  vku::executeImmediately<true>(device, commandPool, queue, [&](vk::CommandBuffer cb) {
+	  vku::executeImmediately(device, commandPool, queue, [&](vk::CommandBuffer cb) {
 		 
 		setLayout(cb, FinalLayout);
 
@@ -3372,7 +3265,7 @@ public:
     typedef vk::ImageAspectFlagBits iafb;
     create(device, info, vk::ImageViewType::e2D, iafb::eDepth, false, true);
 
-	vku::executeImmediately<true>(device, commandPool, queue, [&](vk::CommandBuffer cb) {
+	vku::executeImmediately(device, commandPool, queue, [&](vk::CommandBuffer cb) {
 		setLayout(cb, vk::ImageLayout::eDepthStencilAttachmentOptimal, vk::ImageAspectFlagBits::eDepth);
 	});
   }
@@ -3404,7 +3297,7 @@ public:
 		typedef vk::ImageAspectFlagBits iafb;
 		create(device, info, vk::ImageViewType::e2D, iafb::eStencil, false, true);
 
-		vku::executeImmediately<true>(device, commandPool, queue, [&](vk::CommandBuffer cb) {
+		vku::executeImmediately(device, commandPool, queue, [&](vk::CommandBuffer cb) {
 			setLayout(cb, vk::ImageLayout::eDepthReadOnlyStencilAttachmentOptimal, vk::ImageAspectFlagBits::eStencil);
 		});
 	}
@@ -3482,7 +3375,7 @@ public:
     create(device, info, vk::ImageViewType::e2D, iafb::eColor, false, true);
 	// bug fix - transition to colorattachmentoptimal immediately 
 	// so that render target can be "loaded" instead of cleared if need be
-	vku::executeImmediately<true>(device, commandPool, queue, [&](vk::CommandBuffer cb) {
+	vku::executeImmediately(device, commandPool, queue, [&](vk::CommandBuffer cb) {
 		setLayout(cb, vk::ImageLayout::eColorAttachmentOptimal);
 	});
 
@@ -3723,7 +3616,7 @@ public:
 	stagingBuffer.updateLocal(pFileBegin + baseOffset, totalActualSize);
 
     // Copy the staging buffer to the GPU texture and set the layout.
-    vku::executeImmediately<true>(device, commandPool, queue, [&](vk::CommandBuffer cb) {
+    vku::executeImmediately(device, commandPool, queue, [&](vk::CommandBuffer cb) {
       vk::Buffer buf = stagingBuffer.buffer();
       for (uint32_t mipLevel = 0; mipLevel != mipLevels(); ++mipLevel) {
         auto width = this->width(mipLevel); 
@@ -3739,7 +3632,7 @@ public:
 	  vk::ImageLayout const FinalLayout = vk::ImageLayout::eShaderReadOnlyOptimal) const
   {
 
-	  vku::executeImmediately<true>(device, commandPool, queue, [&](vk::CommandBuffer cb) {
+	  vku::executeImmediately(device, commandPool, queue, [&](vk::CommandBuffer cb) {
 
 		  image.setLayout(cb, FinalLayout);
 

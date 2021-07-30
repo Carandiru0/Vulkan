@@ -739,7 +739,7 @@ static LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg,
 
         case WM_CHAR:
         case WM_SYSCHAR:
-        /*case WM_UNICHAR:
+        case WM_UNICHAR:
         {
             const GLFWbool plain = (uMsg != WM_SYSCHAR);
 
@@ -753,7 +753,7 @@ static LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg,
 
             _glfwInputChar(window, (unsigned int) wParam, getKeyMods(), plain);
             return 0;
-        }*/
+        }
 
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
