@@ -18,6 +18,7 @@
 #ifndef VKU_HPP
 #define VKU_HPP
 
+#include <Utility/mem.h>
 #pragma intrinsic(memcpy)
 #pragma intrinsic(memset)
 
@@ -1406,24 +1407,11 @@ public:
   __SAFE_BUF void updateLocal(T const* const __restrict src, vk::DeviceSize const size) const {
 	  T* const __restrict ptr( static_cast<T* const __restrict>(map()) );
 
-	  if constexpr (alignment >= 32ULL) {
-		  if constexpr (bClear) {
-			  __memclr_aligned_32<true>(ptr, (size_t)maxsizebytes_);  // generic clear for any structure, data is always aligned
-		  }
-		  __memcpy_aligned_32<true>(ptr, src, (size_t)size);
-	  }
-	  else if constexpr (16ULL == alignment) {
-		  if constexpr (bClear) {
-			  __memclr_aligned_16<true>(ptr, (size_t)maxsizebytes_);  // generic clear for any structure, data is always aligned
-		  }
-		  __memcpy_aligned_16<true>(ptr, src, (size_t)size);
-	  }
-	  else {
-		  if constexpr (bClear) {
-			  memset(ptr, 0, (size_t)maxsizebytes_);  // not aligned
-		  }
-		  memcpy(ptr, src, (size_t)size);
-	  }
+		if constexpr (bClear) {
+			memset(ptr, 0, (size_t)maxsizebytes_);  // not aligned
+		}
+		memcpy(ptr, src, (size_t)size);
+
 	  unmap();
 	  flush(maxsizebytes_);
   }
@@ -2463,7 +2451,10 @@ public:
 	  imageMemoryBarriers.dstAccessMask = dstMask;
 	  auto memoryBarriers = nullptr;
 	  auto bufferMemoryBarriers = nullptr;
-	  cb.pipelineBarrier(srcStageMask, dstStageMask, dependencyFlags, memoryBarriers, bufferMemoryBarriers, imageMemoryBarriers);
+
+	  if (srcStageMask != dstStageMask || (srcStageMask == dstStageMask && (srcMask != dstMask))) {
+		  cb.pipelineBarrier(srcStageMask, dstStageMask, dependencyFlags, memoryBarriers, bufferMemoryBarriers, imageMemoryBarriers);
+	  }
   }
 
   void setLayoutFragmentFromCompute(vk::CommandBuffer const& __restrict cb, int32_t const ComputeAccessUsed, vk::ImageAspectFlags aspectMask = vk::ImageAspectFlagBits::eColor) {
@@ -2518,7 +2509,10 @@ public:
 	  imageMemoryBarriers.dstAccessMask = dstMask;
 	  auto memoryBarriers = nullptr;
 	  auto bufferMemoryBarriers = nullptr;
-	  cb.pipelineBarrier(srcStageMask, dstStageMask, dependencyFlags, memoryBarriers, bufferMemoryBarriers, imageMemoryBarriers);
+
+	  if (srcStageMask != dstStageMask || (srcStageMask == dstStageMask && (srcMask != dstMask))) {
+		  cb.pipelineBarrier(srcStageMask, dstStageMask, dependencyFlags, memoryBarriers, bufferMemoryBarriers, imageMemoryBarriers);
+	  }
   }
 
   // For specifying the specific source and destination stages  vk::PipelineStageFlagBits (advanced usage):
@@ -2624,7 +2618,10 @@ public:
 	  imageMemoryBarriers.dstAccessMask = dstMask;
 	  auto memoryBarriers = nullptr;
 	  auto bufferMemoryBarriers = nullptr;
-	  cb.pipelineBarrier(srcStageMask, dstStageMask, dependencyFlags, memoryBarriers, bufferMemoryBarriers, imageMemoryBarriers);
+
+	  if (srcStageMask != dstStageMask || (srcStageMask == dstStageMask && (srcMask != dstMask))) {
+		  cb.pipelineBarrier(srcStageMask, dstStageMask, dependencyFlags, memoryBarriers, bufferMemoryBarriers, imageMemoryBarriers);
+	  }
   }
 
   /// Change the layout of this image using a memory barrier. (simple automatic usage - covers most cases)
@@ -2704,7 +2701,10 @@ public:
     imageMemoryBarriers.dstAccessMask = dstMask;
     auto memoryBarriers = nullptr;
     auto bufferMemoryBarriers = nullptr;
-    cb.pipelineBarrier(srcStageMask, dstStageMask, dependencyFlags, memoryBarriers, bufferMemoryBarriers, imageMemoryBarriers);
+
+	if (srcStageMask != dstStageMask || (srcStageMask == dstStageMask && (srcMask != dstMask))) {
+		cb.pipelineBarrier(srcStageMask, dstStageMask, dependencyFlags, memoryBarriers, bufferMemoryBarriers, imageMemoryBarriers);
+	}
   }
 
   // batched / multiple barriers stages src and dst are same for all images in batch
@@ -2716,6 +2716,7 @@ public:
 	  vk::DependencyFlags dependencyFlags{};
 	  std::array<vk::ImageMemoryBarrier, image_count> imbs;
 	  uint32_t used_image_count(0);
+	  bool bDstMaskSrcMask(false);
 
 	  for (uint32_t i = 0; i < image_count; ++i) {
 
@@ -2816,11 +2817,14 @@ public:
 
 		  imbs[used_image_count].srcAccessMask = srcMask;
 		  imbs[used_image_count].dstAccessMask = dstMask;
+		  bDstMaskSrcMask |= (srcMask == dstMask);
 
 		  ++used_image_count;
 	  }
 	  
-	  cb.pipelineBarrier(srcStageMask, dstStageMask, dependencyFlags, 0, nullptr, 0, nullptr, used_image_count, imbs.data());
+	  if (srcStageMask != dstStageMask || (srcStageMask == dstStageMask && !bDstMaskSrcMask)) {
+		  cb.pipelineBarrier(srcStageMask, dstStageMask, dependencyFlags, 0, nullptr, 0, nullptr, used_image_count, imbs.data());
+	  }
   }
 
   // **** use these for "undefined" / "don't care" source instances:

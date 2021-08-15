@@ -56,6 +56,10 @@
 #include <set>
 #include <vku/vku_doublebuffer.h>
 
+#include <Utility/mem.h>
+#pragma intrinsic(memcpy)
+#pragma intrinsic(memset)
+
 #ifdef VKU_IMPLEMENTATION
 #include <queue>
 #include <Utility/async_long_task.h>
@@ -766,7 +770,7 @@ public:
 		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eDontCare);
 		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
 		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eStore);
-		  rpm.attachmentInitialLayout(vk::ImageLayout::eDepthReadOnlyStencilAttachmentOptimal);
+		  rpm.attachmentInitialLayout(vk::ImageLayout::eUndefined);
 		  rpm.attachmentFinalLayout(vk::ImageLayout::eDepthStencilReadOnlyOptimal);
 
 		  // A subpass to render using the above attachment
@@ -2180,7 +2184,7 @@ public:
 
 	  // utilize the time between a present() and acquireNextImage()
 	  static constexpr uint64_t const umax = nanoseconds(milliseconds(async_long_task::beats::half)).count();
-
+		
 	  static uint32_t
 		  resource_index{};		// **** only "compute, dynamic, post_submit_render" should use the resource_index, otherwise use imageIndex ******
 		  						// dynamic uses imageIndex, but uses resource_index to refer to the objects worked on in post_submit_render
@@ -2362,7 +2366,7 @@ public:
 
 	vk::Semaphore const ccSema = *semaphores[imageIndex].commandCompleteSemaphore_;
 
-	int64_t const task_graphics = async_long_task::enqueue<background_critical>(
+	async_long_task::enqueue<background_critical>(
 		// non-blocking submit
 		[=] {
 			vk::Semaphore const iatexctccSema[4] = { iaSema, ctexSema, tcSema[1], cSema };
