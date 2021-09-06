@@ -27,7 +27,6 @@
 
 #include <array>
 #include <fstream>
-#include <unordered_map>
 #include <vector>
 #include <thread>
 #include <chrono>
@@ -48,8 +47,12 @@
 #define VULKAN_HPP_NO_EXCEPTIONS 
 #define VULKAN_HPP_ASSERT (void)
 
+// ####################################################################################################################
+#pragma component(browser, off, references) // warning BK4504 workaround
 #include <spirv-headers/spirv.hpp11>
 #include <vulkan/vulkan.hpp>		// this is the one and only place vulkan.hpp can be included, use cVulkan.h (prefer)
+#pragma component(browser, on, references) // warning BK4504 workaround
+// #####################################################################################################################
 
 #include <fmt/fmt.h>
 
