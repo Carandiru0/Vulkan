@@ -77,18 +77,8 @@ namespace vku {
 		ACCESS_READWRITE(1),
 		ACCESS_WRITEONLY(-1);
 
-	static constexpr float const
-		DOWN_RESOLUTION_RATIO = 0.5f; // == 50.0 % of original resolution
-
-		// (BouncedLight-Reflections) Fullscreen Resolution / DOWN_RES_FACTOR = Downsampled Resolution  ** Half Resolution is almost identical, Third resolution is close but you can tell, Quarter resolution you can start to see the blockyness
-
-	static inline point2D_t const getDownResolution(point2D_t const frameBufferSz) {   // Downscaled resolution is in proportion to Full HD to HD standard
-		XMVECTOR xmSize = p2D_to_v2(frameBufferSz);									   // eg.) 1920 -> 1280  
-		xmSize = SFM::__fma(xmSize, _mm_set1_ps(DOWN_RESOLUTION_RATIO), _mm_set1_ps(0.5f));
-
-		uvec4_v const uvSize = SFM::floor_to_u32(xmSize);
-		
-		return(point2D_t(uvSize.v));
+	static inline point2D_t const getDownResolution(point2D_t const frameBufferSz) {   // Downscaled resolution is always 50% of original resolution ** Half Resolution is almost identical, Third resolution is close but you can tell, Quarter resolution you can start to see the blockyness
+		return(p2D_shiftr(frameBufferSz, 1));
 	}
 
 	BETTER_ENUM(eCheckerboard, uint32_t const,
