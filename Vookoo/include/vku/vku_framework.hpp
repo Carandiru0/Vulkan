@@ -1898,6 +1898,8 @@ public:
 			  semaphores[i].transferCompleteSemaphore_[1] = device.createSemaphoreUnique(sci).value;	// dynamic transfer
 			  semaphores[i].computeCompleteSemaphore_[0] = device.createSemaphoreUnique(sci).value;		// compute process light
 			  semaphores[i].computeCompleteSemaphore_[1] = device.createSemaphoreUnique(sci).value;		// compute process textures
+			  semaphores[i].staticCompleteSemaphore_ = device.createSemaphoreUnique(sci).value;			// static render
+			  semaphores[i].readbackCompleteSemaphore_ = device.createSemaphoreUnique(sci).value;		// gpu readback
 		  }
 	  }
 	  
@@ -1934,7 +1936,16 @@ public:
 			  VKU_SET_OBJECT_NAME(vk::ObjectType::eCommandBuffer, (VkCommandBuffer)*staticDrawBuffers_.cb[0][resource_index], vkNames::CommandBuffer::STATIC);
 		  }
 	  }
-	  {	// present command buffer is fully static and cannot be changed - no diry flag
+
+	  { // gpureadback command buffer is fully static and cannot be changed - no dirty flag
+		  uint32_t const resource_count((uint32_t)imageViews_.size());
+		  vk::CommandBufferAllocateInfo cbai{ *commandPool_[eCommandPools::DMA_TRANSFER_POOL_PRIMARY], vk::CommandBufferLevel::ePrimary, resource_count };
+		  gpuReadbackBuffers_.allocate(device, cbai);
+		  for (uint32_t resource_index = 0; resource_index < resource_count; ++resource_index) {
+			  VKU_SET_OBJECT_NAME(vk::ObjectType::eCommandBuffer, (VkCommandBuffer)*gpuReadbackBuffers_.cb[0][resource_index], vkNames::CommandBuffer::GPU_READBACK);
+		  }
+	  }
+	  {	// present command buffer is fully static and cannot be changed - no dirty flag
 		  uint32_t const resource_count((uint32_t)imageViews_.size());
 		  vk::CommandBufferAllocateInfo cbai{ *commandPool_[eCommandPools::DEFAULT_POOL], vk::CommandBufferLevel::ePrimary, resource_count };
 		  presentDrawBuffers_.allocate(device, cbai);
@@ -2066,22 +2077,22 @@ public:
 	  rpbi[OFFSCREEN_OFFSET].pClearValues = &clear_offscreenPass;
 
 	  if (iImageIndex < 0) { // both resource of double buffer have command buffers set
-		  for (uint32_t resource_index = 0; resource_index != staticDrawBuffers_.size(); ++resource_index) {
-			  vk::CommandBuffer const cb = *staticDrawBuffers_.cb[0][resource_index];
-			  rpbi[eFrameBuffers::DEPTH].framebuffer			= *framebuffers_[eFrameBuffers::DEPTH][resource_index];
-			  rpbi[eFrameBuffers::HALF_COLOR_ONLY].framebuffer  = *framebuffers_[eFrameBuffers::HALF_COLOR_ONLY][resource_index];
-			  rpbi[eFrameBuffers::FULL_COLOR_ONLY].framebuffer  = *framebuffers_[eFrameBuffers::FULL_COLOR_ONLY][resource_index];
-			  rpbi[eFrameBuffers::MID_COLOR_DEPTH].framebuffer  = *framebuffers_[eFrameBuffers::MID_COLOR_DEPTH][resource_index];
-			  rpbi[OFFSCREEN_OFFSET].framebuffer				= *framebuffers_[eFrameBuffers::OFFSCREEN][resource_index];
+		  for (uint32_t image_index = 0; image_index != staticDrawBuffers_.size(); ++image_index) {
+			  vk::CommandBuffer const cb = *staticDrawBuffers_.cb[0][image_index];
+			  rpbi[eFrameBuffers::DEPTH].framebuffer			= *framebuffers_[eFrameBuffers::DEPTH][image_index];
+			  rpbi[eFrameBuffers::HALF_COLOR_ONLY].framebuffer  = *framebuffers_[eFrameBuffers::HALF_COLOR_ONLY][image_index];
+			  rpbi[eFrameBuffers::FULL_COLOR_ONLY].framebuffer  = *framebuffers_[eFrameBuffers::FULL_COLOR_ONLY][image_index];
+			  rpbi[eFrameBuffers::MID_COLOR_DEPTH].framebuffer  = *framebuffers_[eFrameBuffers::MID_COLOR_DEPTH][image_index];
+			  rpbi[OFFSCREEN_OFFSET].framebuffer				= *framebuffers_[eFrameBuffers::OFFSCREEN][image_index];
 
-			  static_function(std::forward<static_renderpass&& __restrict>({ cb, resource_index,
+			  static_function(std::forward<static_renderpass&& __restrict>({ cb, image_index,
 				  std::move(rpbi[eFrameBuffers::DEPTH]), 
 				  std::move(rpbi[eFrameBuffers::HALF_COLOR_ONLY]), 
 				  std::move(rpbi[eFrameBuffers::FULL_COLOR_ONLY]), 
 				  std::move(rpbi[eFrameBuffers::MID_COLOR_DEPTH]), 
 				  std::move(rpbi[OFFSCREEN_OFFSET]) }));
 
-			  staticCommandsDirty_[resource_index] = false;
+			  staticCommandsDirty_[image_index] = false;
 		  }
 		  
 		  staticCommandCache = static_function;
@@ -2134,6 +2145,12 @@ public:
 		}
   }
   
+  void setGpuReadbackCommands(gpu_readback_function readback_function) {
+
+	  for (uint32_t resource_index = 0; resource_index != gpuReadbackBuffers_.size(); ++resource_index) {
+		  readback_function(*gpuReadbackBuffers_.cb[0][resource_index], resource_index);
+	  }
+  }
 #ifdef VKU_IMPLEMENTATION
 
   private:
@@ -2200,7 +2217,7 @@ public:
 	  resource_control::stage_resources(resource_index);				
 
 	  // ###################################################### //
-	  async_long_task::wait<background_critical>(present_task_id, "present");  // bugfix: absolutely critical that this is done here, any other location results in validation THREADING errors
+	  //async_long_task::wait<background_critical>(present_task_id, "present");  // bugfix: absolutely critical that this is done here, any other location results in validation THREADING errors
 	  // ####################################################### //
 	  
 	  vk::Semaphore const tcSema[2] = { *semaphores[resource_index].transferCompleteSemaphore_[0], *semaphores[resource_index].transferCompleteSemaphore_[1] };
@@ -2355,8 +2372,8 @@ public:
 	  result = device.acquireNextImageKHR(*swapchain_, umax, iaSema, vk::Fence(), &imageIndex);	// **** driver does all of its waiting / spinning here blocking any further execution until ready!!!
 																												  // do any / all updates before this call to spend the time wisely
 	  [[unlikely]] if (vk::Result::eSuccess != result || vk::Result::eSuccess != _presentResult) {
-		  if ( fail_acquire_or_present(result, imageIndex, resource_index) )
-			return;
+		  if (fail_acquire_or_present(result, imageIndex, resource_index))
+			  return;
 	  }
 	  //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%//
 
@@ -2365,105 +2382,127 @@ public:
 	}
 
 	vk::Semaphore const ccSema = *semaphores[imageIndex].commandCompleteSemaphore_;
+	vk::Semaphore const readSema = *semaphores[imageIndex].readbackCompleteSemaphore_;
 
-	async_long_task::enqueue<background_critical>(
-		// non-blocking submit
-		[=] {
-			vk::Semaphore const iatexctccSema[4] = { iaSema, ctexSema, tcSema[1], cSema };
+	{
+		vk::Semaphore const iatexctccSema[4] = { iaSema, ctexSema, tcSema[1], cSema };
+		vk::Semaphore const staticSema = *semaphores[imageIndex].staticCompleteSemaphore_;
 
 //----------// STATIC SUBMIT // // **waiting on input acquire, textureshaders, upload & overlay, compute light
-			{
-				vk::Fence const static_fence = staticDrawBuffers_.fence[0][imageIndex];
+		{
+			vk::Fence const static_fence = staticDrawBuffers_.fence[0][imageIndex];
 
-				device.waitForFences(static_fence, VK_TRUE, umax);
-				device.resetFences(static_fence);
-				if (staticCommandsDirty_[imageIndex]) {
-					setStaticCommands(staticCommandCache, imageIndex);
-				}
-
-				vk::CommandBuffer const cb = *staticDrawBuffers_.cb[0][imageIndex];
-				vk::PipelineStageFlags waitStages[4] = { vk::PipelineStageFlagBits::eVertexInput, vk::PipelineStageFlagBits::eVertexInput, vk::PipelineStageFlagBits::eFragmentShader, vk::PipelineStageFlagBits::eFragmentShader }; // wait at stage data is required
-
-				vk::SubmitInfo submit{};
-				submit.waitSemaphoreCount = 3 + (uint32_t)bAsyncCompute;
-				submit.pWaitSemaphores = iatexctccSema;		// waiting on dynamic transfer & input acquire & compute processing (both texture and light)
-				submit.pWaitDstStageMask = waitStages;
-				submit.commandBufferCount = 1;
-				submit.pCommandBuffers = &cb;				// submitting static cb
-				submit.signalSemaphoreCount = 0;
-				submit.pSignalSemaphores = nullptr;			// signalling static cb completion
-
-				// ########### FRAMES FIRST USAGE OF GRAPHICS QUEUE ################ //
-				graphicsQueue_.submit(1, &submit, static_fence);
+			device.waitForFences(static_fence, VK_TRUE, umax);
+			device.resetFences(static_fence);
+			if (staticCommandsDirty_[imageIndex]) {
+				setStaticCommands(staticCommandCache, imageIndex);
 			}
 
-			//	graphics
-			// 	   |
-			// 	graphics
+			vk::CommandBuffer const cb = *staticDrawBuffers_.cb[0][imageIndex];
+			vk::PipelineStageFlags waitStages[4] = { vk::PipelineStageFlagBits::eVertexInput, vk::PipelineStageFlagBits::eVertexInput, vk::PipelineStageFlagBits::eFragmentShader, vk::PipelineStageFlagBits::eFragmentShader }; // wait at stage data is required
 
-			// **inherent wait between graphics queue operations. they serialize and it is not neccessary to signal a semaphore as there is no inter-queue dependencies.
+			vk::SubmitInfo submit{};
+			submit.waitSemaphoreCount = 3 + (uint32_t)bAsyncCompute;
+			submit.pWaitSemaphores = iatexctccSema;		// waiting on dynamic transfer & input acquire & compute processing (both texture and light)
+			submit.pWaitDstStageMask = waitStages;
+			submit.commandBufferCount = 1;
+			submit.pCommandBuffers = &cb;				// submitting static cb
+			submit.signalSemaphoreCount = 1;
+			submit.pSignalSemaphores = &staticSema;		// signalling static cb completion
+
+			// ########### FRAMES FIRST USAGE OF GRAPHICS QUEUE ################ //
+			graphicsQueue_.submit(1, &submit, static_fence);
+		}
+
+		//	graphics
+		// 	   |
+		// 	graphics
+
+		{
+			vk::Fence const cbFenceReadback = gpuReadbackBuffers_.fence[0][imageIndex];
+			device.waitForFences(cbFenceReadback, VK_TRUE, umax);
+			device.resetFences(cbFenceReadback);				// have to wait on associatted fence, and reset for next iteration
+
+			vk::CommandBuffer const gb = *gpuReadbackBuffers_.cb[0][imageIndex];
+			vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eTransfer };
+
+			vk::SubmitInfo submit{};
+			submit.waitSemaphoreCount = 1;
+			submit.pWaitSemaphores = &staticSema;		// waiting on static completion
+			submit.pWaitDstStageMask = &waitStages;
+			submit.commandBufferCount = 1;
+			submit.pCommandBuffers = &gb;				// submitting gpu readbacks' static cb
+			submit.signalSemaphoreCount = 1;
+			submit.pSignalSemaphores = &readSema;		// signalling gpu readback complete
+			transferQueue_[resource_index].submit(1, &submit, cbFenceReadback);
+		}
+
+		// **inherent wait between graphics queue operations. they serialize and it is not neccessary to signal a semaphore as there is no inter-queue dependencies.
 
 //----------// OVERLAY SUBMIT // **waiting on overlay upload is not necessary as the wait has already taken place in static. The semaphore combines dynamic upload + overlay upload. Static depends on dynamic uploads completion. Single semaphore. Single signal & wait finished in STATIC.
-			{
-				vk::CommandBuffer ob = *overlayDrawBuffers_.cb[eOverlayBuffers::RENDER][imageIndex];
+		{
+			vk::CommandBuffer ob = *overlayDrawBuffers_.cb[eOverlayBuffers::RENDER][imageIndex];
 
-				// fence not required ....
-				static vk::ClearValue const clearArray[] = { {}, {}, {}, {}, vk::ClearValue{ std::array<uint32_t, 4>{0, 0, 0, 0}}, {} };
-				overlay_function(overlay_renderpass{ nullptr, &ob, imageIndex,
-					std::forward<vk::RenderPassBeginInfo&& __restrict>(vk::RenderPassBeginInfo(*overlayPass_, *framebuffers_[eFrameBuffers::COLOR_DEPTH][imageIndex], vk::Rect2D{ {0, 0}, {width_, height_} }, _countof(clearArray), clearArray)) });  // build render cb
+			// fence not required ....
+			static vk::ClearValue const clearArray[] = { {}, {}, {}, {}, vk::ClearValue{ std::array<uint32_t, 4>{0, 0, 0, 0}}, {} };
+			overlay_function(overlay_renderpass{ nullptr, &ob, imageIndex,
+				std::forward<vk::RenderPassBeginInfo&& __restrict>(vk::RenderPassBeginInfo(*overlayPass_, *framebuffers_[eFrameBuffers::COLOR_DEPTH][imageIndex], vk::Rect2D{ {0, 0}, {width_, height_} }, _countof(clearArray), clearArray)) });  // build render cb
 
-				vk::SubmitInfo submit{};
-				submit.waitSemaphoreCount = 0;
-				submit.pWaitSemaphores = nullptr;			// prior submit already waited on &tcSema[1] (contains semaphor that represents dynamic + overlay transfer)
-				submit.pWaitDstStageMask = nullptr;
-				submit.commandBufferCount = 1;
-				submit.pCommandBuffers = &ob;				// submitting overlay's static cb
-				submit.signalSemaphoreCount = 0;
-				submit.pSignalSemaphores = nullptr;			// signalling commands complete
-				graphicsQueue_.submit(1, &submit, overlay_fence);	// ***overlay fence is reset here ok
-			}
+			vk::SubmitInfo submit{};
+			submit.waitSemaphoreCount = 0;
+			submit.pWaitSemaphores = nullptr;			// prior submit already waited on &tcSema[1] (contains semaphor that represents dynamic + overlay transfer)
+			submit.pWaitDstStageMask = nullptr;
+			submit.commandBufferCount = 1;
+			submit.pCommandBuffers = &ob;				// submitting overlay's static cb
+			submit.signalSemaphoreCount = 0;
+			submit.pSignalSemaphores = nullptr;			// signalling commands complete
+			graphicsQueue_.submit(1, &submit, overlay_fence);	// ***overlay fence is reset here ok
+		}
 
-			//	graphics
-			// 	   |
-			// 	graphics
+		//	graphics
+		// 	   |
+		// 	graphics
 
 //----------// PRESENT (POST AA) FINAL SUBMIT // **waiting on nothing
-			{
-				vk::Fence const cbFencePresent = presentDrawBuffers_.fence[0][imageIndex];
-				device.waitForFences(cbFencePresent, VK_TRUE, umax);
-				device.resetFences(cbFencePresent);				// have to wait on associatted fence, and reset for next iteration
+		{
+			vk::Fence const cbFencePresent = presentDrawBuffers_.fence[0][imageIndex];
+			device.waitForFences(cbFencePresent, VK_TRUE, umax);
+			device.resetFences(cbFencePresent);				// have to wait on associatted fence, and reset for next iteration
 
-				vk::CommandBuffer const pb = *presentDrawBuffers_.cb[0][imageIndex];
+			vk::CommandBuffer const pb = *presentDrawBuffers_.cb[0][imageIndex];
 
-				vk::SubmitInfo submit{};
-				submit.waitSemaphoreCount = 0;
-				submit.pWaitSemaphores = nullptr;
-				submit.pWaitDstStageMask = nullptr;
-				submit.commandBufferCount = 1;
-				submit.pCommandBuffers = &pb;				// submitting presents' static cb
-				submit.signalSemaphoreCount = 1;
-				submit.pSignalSemaphores = &ccSema;			// signalling commands complete
-				graphicsQueue_.submit(1, &submit, cbFencePresent);
-			}
-		});
+			vk::SubmitInfo submit{};
+			submit.waitSemaphoreCount = 0;
+			submit.pWaitSemaphores = nullptr;
+			submit.pWaitDstStageMask = nullptr;
+			submit.commandBufferCount = 1;
+			submit.pCommandBuffers = &pb;				// submitting presents' static cb
+			submit.signalSemaphoreCount = 1;
+			submit.pSignalSemaphores = &ccSema;			// signalling commands complete
+			graphicsQueue_.submit(1, &submit, cbFencePresent);
+		}
+	}
 
 	//	graphics
 	// 	   |
 	// 	graphics
 
-	present_task_id = async_long_task::enqueue<background_critical>( // can be submitted w/o wait for task graphics as its the same queue and a semaphore also block execution waiting for graphics task completion.
+	//present_task_id = async_long_task::enqueue<background_critical>( // can be submitted w/o wait for task graphics as its the same queue and a semaphore also block execution waiting for graphics task completion.
 //--// non-blocking present		
-		[this, imageIndex, ccSema] {
+	//	[this, imageIndex, ccSema, readSema] {
+
+			vk::Semaphore const ccrdSema[2] = { ccSema, readSema };
+
 			// ######## Present *currentframe* //
 			vk::PresentInfoKHR presentInfo;
 			vk::SwapchainKHR swapchain = *swapchain_;
 			presentInfo.pSwapchains = &swapchain;
 			presentInfo.swapchainCount = 1;
 			presentInfo.pImageIndices = &imageIndex;
-			presentInfo.waitSemaphoreCount = 1;
-			presentInfo.pWaitSemaphores = &ccSema;		// waiting on completion 
+			presentInfo.waitSemaphoreCount = 2;
+			presentInfo.pWaitSemaphores = ccrdSema;		// waiting on completion 
 			_presentResult = graphicsQueue_.presentKHR(presentInfo);		// submit/present to screen queue
-		});
+	//	});
 
 	// swapping resources
 	resource_index = !resource_index;
@@ -2471,7 +2510,7 @@ public:
 
   void WaitPresentIdle()
   {
-	  async_long_task::wait<background_critical>(present_task_id, "present idle");
+	  //async_long_task::wait<background_critical>(present_task_id, "present idle");
   }
 
 #endif
@@ -2608,8 +2647,11 @@ private:
   struct semaphores {
 	  vk::UniqueSemaphore imageAcquireSemaphore_;
 	  vk::UniqueSemaphore commandCompleteSemaphore_;
+	  vk::UniqueSemaphore readbackCompleteSemaphore_;
+	  vk::UniqueSemaphore staticCompleteSemaphore_;
 	  vk::UniqueSemaphore transferCompleteSemaphore_[2];
 	  vk::UniqueSemaphore computeCompleteSemaphore_[2];
+	  
   } semaphores[2];
   
   vk::UniqueCommandPool		commandPool_[eCommandPools::_size()];
@@ -2625,6 +2667,7 @@ private:
   CommandBufferContainer<1> dynamicDrawBuffers_;
   CommandBufferContainer<eOverlayBuffers::_size()> overlayDrawBuffers_;	// one for transfer, one for rendering
   CommandBufferContainer<1> presentDrawBuffers_;
+  CommandBufferContainer<1> gpuReadbackBuffers_;
 
   vku::ColorAttachmentImage colorImage_;	  // multisampled only
   vku::ColorAttachmentImage lastColorImage_;  // not antialiased and does not contain GUI, for that use PostAA lastColorImage - cPostProcess.h

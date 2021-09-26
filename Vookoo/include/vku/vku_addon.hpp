@@ -195,4 +195,5 @@ namespace vku {
 	} present_renderpass;
 	typedef void(*const present_renderpass_function)(present_renderpass&& __restrict);
 
+	typedef void(* const gpu_readback_function)(vk::CommandBuffer&, uint32_t const);
 }

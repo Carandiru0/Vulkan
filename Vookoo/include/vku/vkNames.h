@@ -8,6 +8,7 @@ namespace vkNames
 		[[maybe_unused]] static inline constexpr char const* const COMPUTE_LIGHT = "[cb] Compute Light";
 		[[maybe_unused]] static inline constexpr char const* const TRANSFER_LIGHT = "[cb] Transfer Light";
 		[[maybe_unused]] static inline constexpr char const* const STATIC = "[cb] Static";
+		[[maybe_unused]] static inline constexpr char const* const GPU_READBACK = "[cb] Gpu Readback";
 		[[maybe_unused]] static inline constexpr char const* const DYNAMIC = "[cb] Dynamic";
 		[[maybe_unused]] static inline constexpr char const* const PRESENT = "[cb] Present";
 		[[maybe_unused]] static inline constexpr char const* const OVERLAY_RENDER = "[cb] Overlay Render";
