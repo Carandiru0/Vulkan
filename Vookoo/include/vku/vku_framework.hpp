@@ -1899,7 +1899,6 @@ public:
 			  semaphores[i].computeCompleteSemaphore_[0] = device.createSemaphoreUnique(sci).value;		// compute process light
 			  semaphores[i].computeCompleteSemaphore_[1] = device.createSemaphoreUnique(sci).value;		// compute process textures
 			  semaphores[i].staticCompleteSemaphore_ = device.createSemaphoreUnique(sci).value;			// static render
-			  semaphores[i].readbackCompleteSemaphore_ = device.createSemaphoreUnique(sci).value;		// gpu readback
 		  }
 	  }
 	  
@@ -2035,7 +2034,7 @@ public:
     cb.end();
   }
 
-  static inline static_renderpass_function_unconst staticCommandCache;
+  constinit static inline static_renderpass_function_unconst staticCommandCache{};
 
   /// Build a static draw buffer. This will be rendered after any dynamic content generated in draw()
   void setStaticCommands(static_renderpass_function static_function, int32_t const iImageIndex = -1) {
@@ -2217,7 +2216,7 @@ public:
 	  resource_control::stage_resources(resource_index);				
 
 	  // ###################################################### //
-	  //async_long_task::wait<background_critical>(present_task_id, "present");  // bugfix: absolutely critical that this is done here, any other location results in validation THREADING errors
+	  async_long_task::wait<background_critical>(present_task_id, "present");  // bugfix: absolutely critical that this is done here, any other location results in validation THREADING errors
 	  // ####################################################### //
 	  
 	  vk::Semaphore const tcSema[2] = { *semaphores[resource_index].transferCompleteSemaphore_[0], *semaphores[resource_index].transferCompleteSemaphore_[1] };
@@ -2382,7 +2381,6 @@ public:
 	}
 
 	vk::Semaphore const ccSema = *semaphores[imageIndex].commandCompleteSemaphore_;
-	vk::Semaphore const readSema = *semaphores[imageIndex].readbackCompleteSemaphore_;
 
 	{
 		vk::Semaphore const iatexctccSema[4] = { iaSema, ctexSema, tcSema[1], cSema };
@@ -2414,29 +2412,35 @@ public:
 			graphicsQueue_.submit(1, &submit, static_fence);
 		}
 
+		//	   graphics
+		// 	   |     |
+		// graphics  transfer
+
+		async_long_task::enqueue<background_critical>(
+			// non-blocking submit
+			[=] {
+				vk::Fence const cbFenceReadback = gpuReadbackBuffers_.fence[0][imageIndex];
+				device.waitForFences(cbFenceReadback, VK_TRUE, umax);
+				device.resetFences(cbFenceReadback);				// have to wait on associatted fence, and reset for next iteration
+
+				vk::CommandBuffer const gb = *gpuReadbackBuffers_.cb[0][imageIndex];
+				vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eTransfer };
+
+				vk::SubmitInfo submit{};
+				submit.waitSemaphoreCount = 1;
+				submit.pWaitSemaphores = &staticSema;		// waiting on static completion
+				submit.pWaitDstStageMask = &waitStages;
+				submit.commandBufferCount = 1;
+				submit.pCommandBuffers = &gb;				// submitting gpu readbacks' static cb
+				submit.signalSemaphoreCount = 0;
+				submit.pSignalSemaphores = nullptr;		
+				transferQueue_[resource_index].submit(1, &submit, cbFenceReadback);
+			});
+
 		//	graphics
 		// 	   |
 		// 	graphics
-
-		{
-			vk::Fence const cbFenceReadback = gpuReadbackBuffers_.fence[0][imageIndex];
-			device.waitForFences(cbFenceReadback, VK_TRUE, umax);
-			device.resetFences(cbFenceReadback);				// have to wait on associatted fence, and reset for next iteration
-
-			vk::CommandBuffer const gb = *gpuReadbackBuffers_.cb[0][imageIndex];
-			vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eTransfer };
-
-			vk::SubmitInfo submit{};
-			submit.waitSemaphoreCount = 1;
-			submit.pWaitSemaphores = &staticSema;		// waiting on static completion
-			submit.pWaitDstStageMask = &waitStages;
-			submit.commandBufferCount = 1;
-			submit.pCommandBuffers = &gb;				// submitting gpu readbacks' static cb
-			submit.signalSemaphoreCount = 1;
-			submit.pSignalSemaphores = &readSema;		// signalling gpu readback complete
-			transferQueue_[resource_index].submit(1, &submit, cbFenceReadback);
-		}
-
+	
 		// **inherent wait between graphics queue operations. they serialize and it is not neccessary to signal a semaphore as there is no inter-queue dependencies.
 
 //----------// OVERLAY SUBMIT // **waiting on overlay upload is not necessary as the wait has already taken place in static. The semaphore combines dynamic upload + overlay upload. Static depends on dynamic uploads completion. Single semaphore. Single signal & wait finished in STATIC.
@@ -2487,11 +2491,9 @@ public:
 	// 	   |
 	// 	graphics
 
-	//present_task_id = async_long_task::enqueue<background_critical>( // can be submitted w/o wait for task graphics as its the same queue and a semaphore also block execution waiting for graphics task completion.
+	present_task_id = async_long_task::enqueue<background_critical>( // can be submitted w/o wait for task graphics as its the same queue and a semaphore also block execution waiting for graphics task completion.
 //--// non-blocking present		
-	//	[this, imageIndex, ccSema, readSema] {
-
-			vk::Semaphore const ccrdSema[2] = { ccSema, readSema };
+		[this, imageIndex, ccSema] {
 
 			// ######## Present *currentframe* //
 			vk::PresentInfoKHR presentInfo;
@@ -2499,10 +2501,10 @@ public:
 			presentInfo.pSwapchains = &swapchain;
 			presentInfo.swapchainCount = 1;
 			presentInfo.pImageIndices = &imageIndex;
-			presentInfo.waitSemaphoreCount = 2;
-			presentInfo.pWaitSemaphores = ccrdSema;		// waiting on completion 
+			presentInfo.waitSemaphoreCount = 1;
+			presentInfo.pWaitSemaphores = &ccSema;		// waiting on completion 
 			_presentResult = graphicsQueue_.presentKHR(presentInfo);		// submit/present to screen queue
-	//	});
+	});
 
 	// swapping resources
 	resource_index = !resource_index;
@@ -2510,7 +2512,7 @@ public:
 
   void WaitPresentIdle()
   {
-	  //async_long_task::wait<background_critical>(present_task_id, "present idle");
+	  async_long_task::wait<background_critical>(present_task_id, "present idle");
   }
 
 #endif
@@ -2647,7 +2649,6 @@ private:
   struct semaphores {
 	  vk::UniqueSemaphore imageAcquireSemaphore_;
 	  vk::UniqueSemaphore commandCompleteSemaphore_;
-	  vk::UniqueSemaphore readbackCompleteSemaphore_;
 	  vk::UniqueSemaphore staticCompleteSemaphore_;
 	  vk::UniqueSemaphore transferCompleteSemaphore_[2];
 	  vk::UniqueSemaphore computeCompleteSemaphore_[2];
