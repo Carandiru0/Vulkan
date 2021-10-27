@@ -603,7 +603,7 @@ private:
 
 	  static constexpr int32_t const granularity = 24 << 2;
 	  static std::string szLast = "";
-	  static int32_t iReplicateCnt = granularity;
+	  constinit static int32_t iReplicateCnt = granularity;
 	 
 	  if (iReplicateCnt <= 0 || szLast.find(std::string(pCallbackData->pMessageIdName).substr(1, granularity>>1)) == std::string::npos) {
 		  

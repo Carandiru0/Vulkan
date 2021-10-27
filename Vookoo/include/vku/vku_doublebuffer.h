@@ -5,11 +5,11 @@ namespace vku
 {
 	// Helper Class //
 	template<typename T>
-	struct double_buffer : no_copy
+	struct alignas(CACHE_LINE_BYTES) double_buffer : no_copy
 	{
 		static constexpr uint32_t const count = 2u;
 
-		alignas(64) T					data[count];
+		T					data[count];
 
 		__declspec(safebuffers) __forceinline T const& __restrict operator[](uint32_t const i) const {
 			return(data[i]);

@@ -2209,7 +2209,7 @@ public:
 	  // utilize the time between a present() and acquireNextImage()
 	  static constexpr uint64_t const umax = nanoseconds(milliseconds(async_long_task::beats::half)).count();
 		
-	  static uint32_t
+	  constinit static uint32_t
 		  resource_index{};		// **** only "compute, dynamic, post_submit_render" should use the resource_index, otherwise use imageIndex ******
 		  						// dynamic uses imageIndex, but uses resource_index to refer to the objects worked on in post_submit_render
 	  
@@ -2637,9 +2637,9 @@ private:
 		computeQueue_[2],
 		graphicsQueue_;
 
-	static inline int64_t present_task_id{};
+	constinit static inline int64_t present_task_id{};
 
-	static inline vk::Result _presentResult{};
+	constinit static inline vk::Result _presentResult{};
 
   vk::Instance instance_;
   vk::SurfaceKHR surface_;
