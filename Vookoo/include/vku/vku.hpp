@@ -36,6 +36,10 @@
 #include <variant>
 #include <tbb/tbb.h>
 
+#ifndef NDEBUG
+#define BREAK_ON_VALIDATION_ERROR 0  // set to 1 to enable debug break on vulkan validation errors. callstack can be used to find source of error.
+#endif
+
 // workaround, so volk gets used instead. note that vulkan is not staically linked using this method
 // all vulkan function calls route properly through volk
 // modify vulkan.hpp (line 756)
@@ -425,19 +429,25 @@ public:
 	  };
 
 #ifndef NDEBUG
-	  // *******Debug - enable extra validation here
-	  //vk::ValidationFeatureEnableEXT const enabledValidation[]{ vk::ValidationFeatureEnableEXT::eBestPractices };
-	  //vk::ValidationFeaturesEXT const enabledValidationFeatures(_countof(enabledValidation), enabledValidation);
+	  // *******Debug - enable extra validation here (performance warnings galore)
+	  //vk::ValidationFeatureEnableEXT const enabledValidation[]{ /*vk::ValidationFeatureEnableEXT::eGpuAssisted, vk::ValidationFeatureEnableEXT::eGpuAssistedReserveBindingSlot,*/ vk::ValidationFeatureEnableEXT::eBestPractices};
+	  //vk::ValidationFeaturesEXT enabledValidationFeatures(_countof(enabledValidation), enabledValidation);
 	  
 	  // pNext linked list chain start:
+	  //enabledValidationFeatures.pNext = instanceInfo.pNext;
 	  //instanceInfo.pNext = &enabledValidationFeatures;
 
 #else // *******Release
 	  // ensure validation is disabled on release builds //
+	  vk::ValidationFeatureDisableEXT const disabledValidation[]{ vk::ValidationFeatureDisableEXT::eAll };
+	  vk::ValidationFeaturesEXT disabledValidationFeatures({}, 0, _countof(disabledValidation), disabledValidation);
+
 	  vk::ValidationCheckEXT const disableValidation[]{ vk::ValidationCheckEXT::eAll };
-	  vk::ValidationFlagsEXT const disabledValidationFlags{ _countof(disableValidation), disableValidation };
+	  vk::ValidationFlagsEXT disabledValidationFlags{ _countof(disableValidation), disableValidation };
 
 	  // pNext linked list chain start:
+	  disabledValidationFeatures.pNext = instanceInfo.pNext;
+	  disabledValidationFlags.pNext = &disabledValidationFeatures;
 	  instanceInfo.pNext = &disabledValidationFlags;
 
 #endif
@@ -651,7 +661,12 @@ private:
 	  else {
 		  --iReplicateCnt;
 	  }
-	  //DebugBreak();
+
+#if defined(BREAK_ON_VALIDATION_ERROR)
+#if BREAK_ON_VALIDATION_ERROR
+	  DebugBreak();
+#endif
+#endif
 
     return VK_FALSE;
   }
@@ -724,7 +739,7 @@ enum class ObjectType
 	vku::DebugCallback::pfn_vkCmdInsertDebugUtilsLabelEXT((VkCommandBuffer const)cb, ((VkDebugUtilsLabelEXT const* const)&label)); \
 }
 		
-#else
+#else // NDEBUG
 
 #define VKU_SET_OBJECT_NAME(type, object, objectname) { (void)type; (void)object; (void)objectname; }
 #define VKU_SET_CMD_BUFFER_LABEL(cb, labelname) { (void)cb; (void)labelname; }
@@ -1147,7 +1162,7 @@ public:
   /// Add a shader module to the pipeline.
   void shader(vk::ShaderStageFlagBits stage, vku::ShaderModule const& __restrict shader) {
     vk::PipelineShaderStageCreateInfo info{};
-    info.shadermodule = shader.shadermodule();
+    info.module = shader.shadermodule();
     info.pName = "main";  // required to always be main - limitation of glsl spec they did it on purpose
     info.stage = stage;
 
@@ -1161,7 +1176,7 @@ public:
   // mostly for live shader, index is in order the shader stages were added
   void replace_shader(uint32_t const index, vk::ShaderStageFlagBits stage, vku::ShaderModule& shader) {
 	  vk::PipelineShaderStageCreateInfo info{};
-	  info.shadermodule = shader.shadermodule();
+	  info.module = shader.shadermodule();
 	  info.pName = "main";
 	  info.stage = stage;
 
@@ -1343,7 +1358,7 @@ public:
   /// Add a shader module to the pipeline.
   void shader(vk::ShaderStageFlagBits stage, vku::ShaderModule const& __restrict shader,
                  const char *entryPoint = "main") {
-    stage_.shadermodule = shader.shadermodule();
+    stage_.module = shader.shadermodule();
     stage_.pName = entryPoint;
     stage_.stage = stage;
 	if (shader.hasSpecialization()) {
