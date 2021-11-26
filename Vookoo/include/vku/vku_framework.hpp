@@ -2164,7 +2164,6 @@ public:
 		  case vk::Result::eSuboptimalKHR:	// silently recreate the swap chain, then pre-acquire first image, reset image and resource indices
 		  case vk::Result::eErrorOutOfDateKHR:
 		  {
-			  ClipCursor(nullptr);  // bugfix, release cursor //
 			  device_.waitIdle();	// safetly continue after idle detect
 			  recreateSwapChain();
 
@@ -2174,7 +2173,6 @@ public:
 		  }
 		  break;
 		  default:
-			  ClipCursor(nullptr);  // bugfix, release cursor //
 			  FMT_LOG_FAIL(GPU_LOG, "Major failure in main render method, < {:s} > ", vk::to_string(result));
 			  break;
 		  };

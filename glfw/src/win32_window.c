@@ -266,6 +266,23 @@ static void updateClipRect(_GLFWwindow* window)
 {
     if (window)
     {
+        /* updated with better version, fixes bugs with cursor area //
+        HWND const hWnd = window->win32.handle;
+        RECT clipRect;
+        GetClientRect(hWnd, &clipRect);
+        
+        SetLastError(ERROR_SUCCESS); // required
+        
+        if (0 == MapWindowPoints(hWnd, NULL, (POINT* const)&clipRect, 2)) {
+            if (ERROR_SUCCESS == GetLastError()) { // required
+                ClipCursor(&clipRect);
+            }
+        }
+        else {
+            ClipCursor(&clipRect);
+        }*/
+
+        // // old version 
         RECT clipRect;
         GetClientRect(window->win32.handle, &clipRect);
         ClientToScreen(window->win32.handle, (POINT*) &clipRect.left);
@@ -940,6 +957,7 @@ static LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg,
         {
             window->win32.cursorTracked = GLFW_FALSE;
             _glfwInputCursorEnter(window, GLFW_FALSE);
+
             return 0;
         }
 
