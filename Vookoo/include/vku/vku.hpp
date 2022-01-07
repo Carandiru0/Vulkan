@@ -42,7 +42,7 @@
 
 // workaround, so volk gets used instead. note that vulkan is not staically linked using this method
 // all vulkan function calls route properly through volk
-// modify vulkan.hpp (line 756)
+// modify Vulkan->hpp (line 756)
 // #if defined(VK_NO_PROTOTYPES)            // was: #if !defined(VK_NO_PROTOTYPES)
 // class DispatchLoaderStatic
 #define VULKAN_HPP_ENABLE_DYNAMIC_LOADER_TOOL 0 // disabled - using volk instead
@@ -54,7 +54,7 @@
 // ####################################################################################################################
 #pragma component(browser, off, references) // warning BK4504 workaround
 #include <spirv-headers/spirv.hpp11>
-#include <vulkan/vulkan.hpp>		// this is the one and only place vulkan.hpp can be included, use cVulkan.h (prefer)
+#include <vulkan/Vulkan.hpp>		// this is the one and only place Vulkan->hpp can be included, use cVulkan->h (prefer)
 #pragma component(browser, on, references) // warning BK4504 workaround
 // #####################################################################################################################
 
@@ -87,7 +87,7 @@
 #define VMA_ASSERT(expr) ((void)0)
 #endif
 #ifndef VULKAN_H_
-#define VULKAN_H_ // sanity check prevent vma from additional inclusion of vulkan.h which is covered by volk ONLY
+#define VULKAN_H_ // sanity check prevent vma from additional inclusion of Vulkan->h which is covered by volk ONLY
 #endif
 
 #include <vku/vma/vk_mem_alloc.h>
@@ -615,7 +615,7 @@ private:
 	  static std::string szLast = "";
 	  constinit static int32_t iReplicateCnt = granularity;
 	 
-	  if (iReplicateCnt <= 0 || szLast.find(std::string(pCallbackData->pMessageIdName).substr(1, granularity>>1)) == std::string::npos) {
+ 	  if (iReplicateCnt <= 0 || szLast.find(std::string(pCallbackData->pMessageIdName).substr(1, granularity>>1)) == std::string::npos) {
 		  
 		  vk::DebugUtilsMessageSeverityFlagsEXT const severity(messageSeverity);
 		  vk::DebugUtilsMessageTypeFlagsEXT const types(messageTypes);
@@ -1392,8 +1392,8 @@ private:
 /// Buffers require memory objects which represent GPU and CPU resources.
 class GenericBuffer {
 public:
-  GenericBuffer() {
-  }
+	constexpr GenericBuffer() {} // every member is zero initialized (see below) - constexpr of the default ctor allows constinit optimization for private voxel data in cVoxelWorld.cpp file.
+  
 
   GenericBuffer(vk::BufferUsageFlags const usage, vk::DeviceSize const size, vk::MemoryPropertyFlags const memflags = vk::MemoryPropertyFlagBits::eDeviceLocal, VmaMemoryUsage const gpu_usage = VMA_MEMORY_USAGE_UNKNOWN, bool const bDedicatedMemory = false, bool const bPersistantMapping = false) {
 	  

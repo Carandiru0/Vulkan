@@ -35,7 +35,7 @@
 
 #ifndef VKU_NO_GLFW
 #define GLFW_EXPOSE_NATIVE_WIN32
-//#define GLFW_INCLUDE_VULKAN // not required here, as vulkan.h is already included
+//#define GLFW_INCLUDE_VULKAN // not required here, as Vulkan->h is already included
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 #endif
@@ -230,6 +230,7 @@ public:
 	vk::PhysicalDeviceFeatures enabledFeatures{};
 
 	enabledFeatures.geometryShader = supportedFeatures.features.geometryShader;
+	enabledFeatures.depthClamp = supportedFeatures.features.depthClamp;
 	enabledFeatures.samplerAnisotropy = supportedFeatures.features.samplerAnisotropy;
 	//enabledFeatures.robustBufferAccess = supportedFeatures.robustBufferAccess; // safer but a lot slower good for debugging out of bounds access
 	enabledFeatures.textureCompressionBC = supportedFeatures.features.textureCompressionBC;
@@ -241,6 +242,7 @@ public:
 	PRINT_FEATURE(supportedMemoryModel.vulkanMemoryModel, "vulkan memory model"); if (!supportedMemoryModel.vulkanMemoryModel) return;
 	PRINT_FEATURE(supportedByteStorage.storageBuffer8BitAccess, "storage buffer 8bit"); if (!supportedByteStorage.storageBuffer8BitAccess) return;
 	PRINT_FEATURE(enabledFeatures.geometryShader, "geometry shader"); if (!enabledFeatures.geometryShader) return;
+	PRINT_FEATURE(enabledFeatures.depthClamp, "depth clamping"); if (!enabledFeatures.depthClamp) return;
 	PRINT_FEATURE(enabledFeatures.samplerAnisotropy, "anisotropic filtering"); if (!enabledFeatures.samplerAnisotropy) return;
 	PRINT_FEATURE(enabledFeatures.textureCompressionBC, "texture compression"); if (!enabledFeatures.textureCompressionBC) return;
 	PRINT_FEATURE(enabledFeatures.independentBlend, "independent blending"); if (!enabledFeatures.independentBlend) return;	  // independent (different) blend states for multiple color attachments
@@ -456,7 +458,7 @@ private:
 BETTER_ENUM(eCommandPools, uint32_t const, DEFAULT_POOL = 0, OVERLAY_POOL, TRANSIENT_POOL, DMA_TRANSFER_POOL_PRIMARY, DMA_TRANSFER_POOL_SECONDARY, COMPUTE_POOL_PRIMARY, COMPUTE_POOL_SECONDARY);
 BETTER_ENUM(eFrameBuffers, uint32_t const, DEPTH, HALF_COLOR_ONLY, FULL_COLOR_ONLY, MID_COLOR_DEPTH, COLOR_DEPTH, PRESENT, OFFSCREEN);
 BETTER_ENUM(eOverlayBuffers, uint32_t const, TRANSFER, RENDER);
-BETTER_ENUM(eComputeBuffers, uint32_t const, TRANSFER, TRANSFER_LIGHT, COMPUTE_LIGHT, COMPUTE_TEXTURE);
+BETTER_ENUM(eComputeBuffers, uint32_t const, TRANSFER, TRANSFER_LIGHT, COMPUTE_LIGHT);
 
 class Window {
 
@@ -835,7 +837,7 @@ public:
 		  pm.shader(vk::ShaderStageFlagBits::eFragment, frag_);
 
 		  pm.depthCompareOp(vk::CompareOp::eAlways);
-		  pm.depthClampEnable(VK_FALSE); // must be false
+		  pm.depthClampEnable(VK_FALSE);
 		  pm.depthTestEnable(VK_FALSE);
 		  pm.depthWriteEnable(VK_FALSE);
 		  // ################################
@@ -1896,8 +1898,7 @@ public:
 			  semaphores[i].commandCompleteSemaphore_ = device.createSemaphoreUnique(sci).value;
 			  semaphores[i].transferCompleteSemaphore_[0] = device.createSemaphoreUnique(sci).value;	// compute transfer
 			  semaphores[i].transferCompleteSemaphore_[1] = device.createSemaphoreUnique(sci).value;	// dynamic transfer
-			  semaphores[i].computeCompleteSemaphore_[0] = device.createSemaphoreUnique(sci).value;		// compute process light
-			  semaphores[i].computeCompleteSemaphore_[1] = device.createSemaphoreUnique(sci).value;		// compute process textures
+			  semaphores[i].computeCompleteSemaphore_ = device.createSemaphoreUnique(sci).value;		// compute process light
 			  semaphores[i].staticCompleteSemaphore_ = device.createSemaphoreUnique(sci).value;			// static render
 		  }
 	  }
@@ -2005,14 +2006,14 @@ public:
 			  VKU_SET_OBJECT_NAME(vk::ObjectType::eCommandBuffer, (VkCommandBuffer)* computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_LIGHT][resource_index], vkNames::CommandBuffer::COMPUTE_LIGHT);
 		  }
 	  }
-	  { // compute textureShaders
+	  /* { // [[deprecated]] compute textureShaders
 		  uint32_t const resource_count(2U);
 		  vk::CommandBufferAllocateInfo cbai{ *commandPool_[eCommandPools::COMPUTE_POOL_SECONDARY], vk::CommandBufferLevel::ePrimary, resource_count };	// 2 resources
 		  computeDrawBuffers_.allocate<eComputeBuffers::COMPUTE_TEXTURE>(device, cbai);
 		  for (uint32_t resource_index = 0; resource_index < resource_count; ++resource_index) {
 			  VKU_SET_OBJECT_NAME(vk::ObjectType::eCommandBuffer, (VkCommandBuffer)*computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_TEXTURE][resource_index], vkNames::CommandBuffer::COMPUTE_TEXTURE);
 		  }
-	  }
+	  }*/
 
 	  initializeCheckerboardStencilBufferImages(*commandPool_[eCommandPools::TRANSIENT_POOL], graphicsQueue_);
 
@@ -2203,8 +2204,8 @@ public:
 	  // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||                           |||||||||||||||||||||||||||||||||||||||||||||||||
 	  // 
 	  // 	   
-	  //                                               [ COMPUTE (TEXTURESHADERS) ] ---| 
-	  //                                                                               [ WAIT NEXYIMAGEINDEX ] ----|
+	  //                                               [ COMPUTE [[deprecated]] (TEXTURESHADERS) ] ---| 
+	  //                                                                               [ WAIT NEXTIMAGEINDEX ] ----|
 	  // [ UPLOAD (LIGHT) ] ---------[ COMPUTE (LIGHT) ] ----------------------------------------------------------[ STATIC ]-----[ OVERLAY ]-----[ POST & PRESENT ]
 	  //                  [ UPLOAD (DYNAMIC + OVERLAY) ] ------------------|
 	  //
@@ -2215,7 +2216,7 @@ public:
 	  // ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 	  // utilize the time between a present() and acquireNextImage()
-	  static constexpr uint64_t const umax = nanoseconds(milliseconds(async_long_task::beats::half)).count();
+	  static constexpr uint64_t const umax = nanoseconds(milliseconds(async_long_task::beats::half_second)).count();
 		
 	  constinit static uint32_t
 		  resource_index{};		// **** only "compute, dynamic, post_submit_render" should use the resource_index, otherwise use imageIndex ******
@@ -2231,12 +2232,12 @@ public:
 
 	  int64_t task_compute_light(0);
 
-	  vk::Semaphore const cSema = { *semaphores[resource_index].computeCompleteSemaphore_[0] };
+	  vk::Semaphore const cSema = { *semaphores[resource_index].computeCompleteSemaphore_ };
 	  bool bAsyncCompute(false);
 
 	  //----// UPLOAD (LIGHT) // // **waiting on nothing
 	  {
-		  vk::Fence const dma_transfer_fence = computeDrawBuffers_.fence[eComputeBuffers::TRANSFER][resource_index]; // not only one fence is required for the submission of TRANSFER and TRANSFER_LIGHT command buffers.
+		  vk::Fence const dma_transfer_fence = computeDrawBuffers_.fence[eComputeBuffers::TRANSFER][resource_index]; // only one fence is required for the submission of TRANSFER and TRANSFER_LIGHT command buffers.
 		  if (computeDrawBuffers_.queued[eComputeBuffers::TRANSFER][resource_index]) {
 			  device.waitForFences(dma_transfer_fence, VK_TRUE, umax);			// protect
 			  device.resetFences(dma_transfer_fence);
@@ -2244,10 +2245,10 @@ public:
 		  }
 		  computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = false; // reset
 
-		  vk::CommandBuffer const compute_uploads[4] = { *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER][resource_index], *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER_LIGHT][resource_index], nullptr, nullptr };
+		  vk::CommandBuffer const compute_uploads[3] = { *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER][resource_index], *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER_LIGHT][resource_index], nullptr };
 
 		  // upload light
-		  bool const upload_light = gpu_compute(std::forward<compute_pass&& __restrict>({ compute_uploads[eComputeBuffers::TRANSFER], compute_uploads[eComputeBuffers::TRANSFER_LIGHT], compute_uploads[eComputeBuffers::COMPUTE_LIGHT], compute_uploads[eComputeBuffers::COMPUTE_TEXTURE], resource_index }));
+		  bool const upload_light = gpu_compute(std::forward<compute_pass&& __restrict>({ compute_uploads[eComputeBuffers::TRANSFER], compute_uploads[eComputeBuffers::TRANSFER_LIGHT], compute_uploads[eComputeBuffers::COMPUTE_LIGHT], resource_index }));
 
 		  // COMPUTE DMA TRANSFER SUBMIT //
 		  
@@ -2272,7 +2273,7 @@ public:
 			task_compute_light = async_long_task::enqueue<background_critical>(
 			// non-blocking submit
 			[=] {
-				vk::CommandBuffer const compute_process[4] = { nullptr, nullptr, *computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_LIGHT][resource_index], nullptr };
+				vk::CommandBuffer const compute_process[3] = { nullptr, nullptr, *computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_LIGHT][resource_index] };
 
 				vk::Fence const compute_fence = computeDrawBuffers_.fence[eComputeBuffers::COMPUTE_LIGHT][resource_index];
 				if (computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index]) {
@@ -2281,7 +2282,7 @@ public:
 					computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index] = false; // reset
 				}
 
-				gpu_compute(std::forward<compute_pass&& __restrict>({ compute_process[eComputeBuffers::TRANSFER], compute_process[eComputeBuffers::TRANSFER_LIGHT], compute_process[eComputeBuffers::COMPUTE_LIGHT], compute_process[eComputeBuffers::COMPUTE_TEXTURE], resource_index }));    // compute part resets the dirty state that transfer set
+				gpu_compute(std::forward<compute_pass&& __restrict>({ compute_process[eComputeBuffers::TRANSFER], compute_process[eComputeBuffers::TRANSFER_LIGHT], compute_process[eComputeBuffers::COMPUTE_LIGHT], resource_index }));    // compute part resets the dirty state that transfer set
 
 				vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eComputeShader };
 
@@ -2337,8 +2338,8 @@ public:
 		  }
 	  }
 
-	  //----// COMPUTE SUBMIT (TEXTURESHADERS)// // **waiting on nothing
-	  vk::Semaphore const ctexSema = { *semaphores[resource_index].computeCompleteSemaphore_[1] };
+	  //----// COMPUTE SUBMIT [[deprecated]] (TEXTURESHADERS)// // **waiting on nothing
+	  /*vk::Semaphore const ctexSema = {*semaphores[resource_index].computeCompleteSemaphore_[1]};
 	  {
 		vk::CommandBuffer const compute_process[4] = { nullptr, nullptr, nullptr, *computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_TEXTURE][resource_index] };
 
@@ -2364,7 +2365,7 @@ public:
 		computeQueue_[!resource_index].submit(1, &submit, compute_fence); // always use "other" compute queue so they potentially can be running independently and in parallel
 
 		computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_TEXTURE][resource_index] = true;
-	  }
+	  }*/
 
 	  // upload & compute
 	  // 	   |
@@ -2394,7 +2395,7 @@ public:
 	vk::Semaphore const ccSema = *semaphores[imageIndex].commandCompleteSemaphore_;
 
 	{
-		vk::Semaphore const iatexctccSema[4] = { iaSema, ctexSema, tcSema[1], cSema };
+		vk::Semaphore const iatccSema[3] = { iaSema, tcSema[1], cSema };
 		vk::Semaphore const staticSema = *semaphores[imageIndex].staticCompleteSemaphore_;
 
 //----------// STATIC SUBMIT // // **waiting on input acquire, textureshaders, upload & overlay, compute light
@@ -2408,11 +2409,11 @@ public:
 			}
 
 			vk::CommandBuffer const cb = *staticDrawBuffers_.cb[0][imageIndex];
-			vk::PipelineStageFlags waitStages[4] = { vk::PipelineStageFlagBits::eVertexInput, vk::PipelineStageFlagBits::eVertexInput, vk::PipelineStageFlagBits::eFragmentShader, vk::PipelineStageFlagBits::eFragmentShader }; // wait at stage data is required
+			vk::PipelineStageFlags waitStages[3] = { vk::PipelineStageFlagBits::eVertexInput, vk::PipelineStageFlagBits::eFragmentShader, vk::PipelineStageFlagBits::eFragmentShader }; // wait at stage data is required
 
 			vk::SubmitInfo submit{};
-			submit.waitSemaphoreCount = 3 + (uint32_t)bAsyncCompute;
-			submit.pWaitSemaphores = iatexctccSema;		// waiting on dynamic transfer & input acquire & compute processing (both texture and light)
+			submit.waitSemaphoreCount = 2 + (uint32_t)bAsyncCompute;
+			submit.pWaitSemaphores = iatccSema;		// waiting on dynamic transfer & input acquire & compute processing (both texture and light)
 			submit.pWaitDstStageMask = waitStages;
 			submit.commandBufferCount = 1;
 			submit.pCommandBuffers = &cb;				// submitting static cb
@@ -2662,7 +2663,7 @@ private:
 	  vk::UniqueSemaphore commandCompleteSemaphore_;
 	  vk::UniqueSemaphore staticCompleteSemaphore_;
 	  vk::UniqueSemaphore transferCompleteSemaphore_[2];
-	  vk::UniqueSemaphore computeCompleteSemaphore_[2];
+	  vk::UniqueSemaphore computeCompleteSemaphore_;
 	  
   } semaphores[2];
   
@@ -2674,7 +2675,7 @@ private:
   std::vector<vk::Image> images_;
 
   vk::UniqueFramebuffer* framebuffers_[eFrameBuffers::_size()] = { nullptr };
-  CommandBufferContainer<eComputeBuffers::_size()> computeDrawBuffers_;	// one for transfer, one for computing light, one for computing textures ....
+  CommandBufferContainer<eComputeBuffers::_size()> computeDrawBuffers_;	// one for transfer, one for transfering light, one for computing light
   CommandBufferContainer<1> staticDrawBuffers_;
   CommandBufferContainer<1> dynamicDrawBuffers_;
   CommandBufferContainer<eOverlayBuffers::_size()> overlayDrawBuffers_;	// one for transfer, one for rendering
@@ -2682,7 +2683,7 @@ private:
   CommandBufferContainer<1> gpuReadbackBuffers_;
 
   vku::ColorAttachmentImage colorImage_;	  // multisampled only
-  vku::ColorAttachmentImage lastColorImage_;  // not antialiased and does not contain GUI, for that use PostAA lastColorImage - cPostProcess.h
+  vku::ColorAttachmentImage lastColorImage_;  // not antialiased and does not contain GUI, for that use PostAA lastColorImage - cPostProcess->h
 
   struct {
 	  vku::ColorAttachmentImage		multisampled[2];

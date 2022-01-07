@@ -34,7 +34,9 @@ namespace vku
 			return(*this);
 		}
 
-		double_buffer() = default;
+		constexpr double_buffer() // allow constinit optimization. data also must have constexpr ctor
+			: data{}
+		{}
 		~double_buffer() = default;
 	};
 

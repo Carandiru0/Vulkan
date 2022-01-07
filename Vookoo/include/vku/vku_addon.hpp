@@ -149,7 +149,7 @@ namespace vku {
 		vk::CommandBuffer cb_transfer;
 		vk::CommandBuffer cb_transfer_light;
 		vk::CommandBuffer cb_render_light;
-		vk::CommandBuffer cb_render_texture;
+		// [[deprecated]] vk::CommandBuffer cb_render_texture;
 		uint32_t resource_index;
 
 	} compute_pass;
