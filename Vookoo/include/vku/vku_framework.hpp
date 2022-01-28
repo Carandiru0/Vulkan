@@ -2509,8 +2509,7 @@ public:
 
 			// ######## Present *currentframe* //
 			vk::PresentInfoKHR presentInfo;
-			vk::SwapchainKHR swapchain = *swapchain_;
-			presentInfo.pSwapchains = &swapchain;
+			presentInfo.pSwapchains = &(*swapchain_);
 			presentInfo.swapchainCount = 1;
 			presentInfo.pImageIndices = &imageIndex;
 			presentInfo.waitSemaphoreCount = 1;
