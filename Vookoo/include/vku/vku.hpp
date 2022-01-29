@@ -68,7 +68,9 @@
 #define VMA_VULKAN_VERSION 1002000 // Vulkan 1.2
 #define VMA_DEDICATED_ALLOCATION 1
 #define VMA_MEMORY_BUDGET 1
-
+#define VMA_SIMPLIFY_OPTIMIZE 1		// Enables these option for default pool:
+									// VMA_POOL_CREATE_IGNORE_BUFFER_IMAGE_GRANULARITY_BIT
+									// VMA_POOL_CREATE_LINEAR_ALGORITHM_BIT
 #ifndef NDEBUG 
 #ifdef VKU_VMA_DEBUG_ENABLED 
 #define VMA_DEBUG_MARGIN 32
@@ -1448,14 +1450,14 @@ public:
 	  bActiveDelta = (size != activesizebytes_);
 	  activesizebytes_ = size;
   }
-  void createAsGPUBuffer(vk::Device device, vk::CommandPool commandPool, vk::Queue queue, vk::DeviceSize const maxsize) // good for gpu->gpu copies, used to reset buffers shared_buffer & subgroup_layer_count_max
+  void createAsGPUBuffer(vk::Device const device, vk::CommandPool const commandPool, vk::Queue const queue, vk::DeviceSize const maxsize, vk::BufferUsageFlagBits const bits) // good for gpu->gpu copies, used to reset buffers shared_buffer & subgroup_layer_count_max
   {
 	  if (maxsize == 0) return;
 	  using buf = vk::BufferUsageFlagBits;
 	  using pfb = vk::MemoryPropertyFlagBits;
 
 	  if (0 == maxsizebytes()) { // only allocate once
-		  *this = vku::GenericBuffer(buf::eTransferSrc | buf::eTransferDst, maxsize); // device local, gpu only buffer
+		  *this = vku::GenericBuffer(bits, maxsize); // device local, gpu only buffer
 		  activesizebytes_ = maxsizebytes();
 
 		  // upload temporary staging buffer to clear

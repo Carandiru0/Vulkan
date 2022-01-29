@@ -11797,7 +11797,13 @@ VmaPool_T::VmaPool_T(
         createInfo.blockSize != 0 ? createInfo.blockSize : preferredBlockSize,
         createInfo.minBlockCount,
         createInfo.maxBlockCount,
+#ifdef VMA_SIMPLIFY_OPTIMIZE
+#if VMA_SIMPLIFY_OPTIMIZE
+        1,  // bypass granularity check.
+#else
         (createInfo.flags & VMA_POOL_CREATE_IGNORE_BUFFER_IMAGE_GRANULARITY_BIT) != 0 ? 1 : hAllocator->GetBufferImageGranularity(),
+#endif
+#endif
         createInfo.frameInUseCount,
         createInfo.blockSize != 0, // explicitBlockSize
         createInfo.flags & VMA_POOL_CREATE_ALGORITHM_MASK), // algorithm
@@ -11849,7 +11855,13 @@ VmaBlockVector::VmaBlockVector(
     m_BufferImageGranularity(bufferImageGranularity),
     m_FrameInUseCount(frameInUseCount),
     m_ExplicitBlockSize(explicitBlockSize),
+#ifdef VMA_SIMPLIFY_OPTIMIZE
+#if VMA_SIMPLIFY_OPTIMIZE
     m_Algorithm(algorithm),
+#else
+    m_Algorithm(algorithm),
+#endif
+#endif
     m_HasEmptyBlock(false),
     m_Blocks(VmaStlAllocator<VmaDeviceMemoryBlock*>(hAllocator->GetAllocationCallbacks())),
     m_NextBlockId(0)
