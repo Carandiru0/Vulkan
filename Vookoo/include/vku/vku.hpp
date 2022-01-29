@@ -1457,7 +1457,7 @@ public:
 	  using pfb = vk::MemoryPropertyFlagBits;
 
 	  if (0 == maxsizebytes()) { // only allocate once
-		  *this = vku::GenericBuffer(bits, maxsize); // device local, gpu only buffer
+		  *this = vku::GenericBuffer(bits | buf::eTransferDst, maxsize); // device local, gpu only buffer
 		  activesizebytes_ = maxsizebytes();
 
 		  // upload temporary staging buffer to clear
