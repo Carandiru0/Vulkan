@@ -2240,7 +2240,6 @@ public:
 		  vk::Fence const dma_transfer_fence = computeDrawBuffers_.fence[eComputeBuffers::TRANSFER][resource_index]; // only one fence is required for the submission of TRANSFER and TRANSFER_LIGHT command buffers.
 		  if (computeDrawBuffers_.queued[eComputeBuffers::TRANSFER][resource_index]) {
 			  device.waitForFences(dma_transfer_fence, VK_TRUE, umax);			// protect
-			  device.resetFences(dma_transfer_fence);
 			  computeDrawBuffers_.queued[eComputeBuffers::TRANSFER][resource_index] = false; // reset
 		  }
 		  computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = false; // reset
@@ -2261,6 +2260,7 @@ public:
 		  submit.signalSemaphoreCount = (uint32_t)upload_light;
 		  submit.pSignalSemaphores = upload_light ? &tcSema[0] : nullptr;			// signal for compute
 
+		  device.resetFences(dma_transfer_fence);
 		  transferQueue_[resource_index].submit(1, &submit, dma_transfer_fence);
 
 		  computeDrawBuffers_.queued[eComputeBuffers::TRANSFER][resource_index] = true;
@@ -2278,7 +2278,6 @@ public:
 				vk::Fence const compute_fence = computeDrawBuffers_.fence[eComputeBuffers::COMPUTE_LIGHT][resource_index];
 				if (computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index]) {
 					device.waitForFences(compute_fence, VK_TRUE, umax);
-					device.resetFences(compute_fence);
 					computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index] = false; // reset
 				}
 
@@ -2294,6 +2293,8 @@ public:
 				submit.pCommandBuffers = &compute_process[eComputeBuffers::COMPUTE_LIGHT];				// submitting compute cb
 				submit.signalSemaphoreCount = 1;
 				submit.pSignalSemaphores = &cSema;			// signalling compute cb completion
+
+				device.resetFences(compute_fence);
 				computeQueue_[resource_index].submit(1, &submit, compute_fence);
 
 				computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index] = true;
@@ -2302,24 +2303,19 @@ public:
 	  }
 
 	  //----// UPLOAD & OVERLAY // // **waiting on nothing
-	  vk::Fence const overlay_fence = overlayDrawBuffers_.fence[eOverlayBuffers::TRANSFER][resource_index];   // bugfix: now properly double-buffered, no longer serializes frame by having 0 here instead of resource_index!
+	  vk::Fence const overlay_dynamic_fence[2]{ overlayDrawBuffers_.fence[eOverlayBuffers::TRANSFER][resource_index], dynamicDrawBuffers_.fence[0][resource_index] };   // bugfix: now properly double-buffered, no longer serializes frame by having 0 here instead of resource_index!
 	  {
+		  device.waitForFences(2, overlay_dynamic_fence, VK_TRUE, umax);				// protect 
+		  
 		  vk::CommandBuffer do_cb[2] = { *dynamicDrawBuffers_.cb[0][resource_index], *overlayDrawBuffers_.cb[eOverlayBuffers::TRANSFER][resource_index] };
 
 		  { // ######### begin overlay transfer cb update (spawned)
-			  device.waitForFences(overlay_fence, VK_TRUE, umax);				// protect // overlay fence is overlay Render cb
-			  device.resetFences(overlay_fence);
-
 			  // staging
 			  overlay_function(std::forward<overlay_renderpass&& __restrict>({ &do_cb[1], nullptr, resource_index, std::forward<vk::RenderPassBeginInfo&& __restrict>(vk::RenderPassBeginInfo{}) }));		// submission of staged data to gpu // build transfer cb
 		  }
 
-		  vk::Fence const dynamic_fence = dynamicDrawBuffers_.fence[0][resource_index];
-
 		  { // ######### begin dynamic transfer cb update (main thread)
-			  device.waitForFences(dynamic_fence, VK_TRUE, umax);		// protect
-			  device.resetFences(dynamic_fence);
-
+			  // staging
 			  dynamic_function(std::forward<dynamic_renderpass&&>({ do_cb[0], resource_index }));	// submission of staged data to gpu
 		  }
 
@@ -2334,7 +2330,8 @@ public:
 			  submit.signalSemaphoreCount = 1;
 			  submit.pSignalSemaphores = &tcSema[1];			// signal for dynamic cb in slot 0, signal for overlay dynamic cb in slot 1 (completion)
 
-			  transferQueue_[!resource_index].submit(1, &submit, dynamic_fence); // <---- this is opposite transfer queue on purpose so dma transfers are simultaneous
+			  device.resetFences(2, overlay_dynamic_fence);
+			  transferQueue_[!resource_index].submit(1, &submit, overlay_dynamic_fence[1]); // <---- this is opposite transfer queue on purpose so dma transfers are simultaneous
 		  }
 	  }
 
@@ -2402,9 +2399,9 @@ public:
 		{
 			vk::Fence const static_fence = staticDrawBuffers_.fence[0][imageIndex];
 
-			device.waitForFences(static_fence, VK_TRUE, umax);
-			device.resetFences(static_fence);
 			if (staticCommandsDirty_[imageIndex]) {
+				device.waitForFences(static_fence, VK_TRUE, umax);
+				
 				setStaticCommands(staticCommandCache, imageIndex);
 			}
 
@@ -2421,6 +2418,7 @@ public:
 			submit.pSignalSemaphores = &staticSema;		// signalling static cb completion
 
 			// ########### FRAMES FIRST USAGE OF GRAPHICS QUEUE ################ //
+			device.resetFences(static_fence);
 			graphicsQueue_.submit(1, &submit, static_fence);
 		}
 
@@ -2433,8 +2431,7 @@ public:
 			[=] {
 				vk::Fence const cbFenceReadback = gpuReadbackBuffers_.fence[0][imageIndex];
 				device.waitForFences(cbFenceReadback, VK_TRUE, umax);
-				device.resetFences(cbFenceReadback);				// have to wait on associatted fence, and reset for next iteration
-
+				
 				vk::CommandBuffer const gb = *gpuReadbackBuffers_.cb[0][imageIndex];
 				vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eTransfer };
 
@@ -2446,6 +2443,8 @@ public:
 				submit.pCommandBuffers = &gb;				// submitting gpu readbacks' static cb
 				submit.signalSemaphoreCount = 0;
 				submit.pSignalSemaphores = nullptr;		
+
+				device.resetFences(cbFenceReadback);				// have to wait on associatted fence, and reset for next iteration
 				transferQueue_[resource_index].submit(1, &submit, cbFenceReadback);
 			});
 
@@ -2472,7 +2471,7 @@ public:
 			submit.pCommandBuffers = &ob;				// submitting overlay's static cb
 			submit.signalSemaphoreCount = 0;
 			submit.pSignalSemaphores = nullptr;			// signalling commands complete
-			graphicsQueue_.submit(1, &submit, overlay_fence);	// ***overlay fence is reset here ok
+			graphicsQueue_.submit(1, &submit, overlay_dynamic_fence[0]);	// ***overlay fence is reset here ok
 		}
 
 		//	graphics
@@ -2483,8 +2482,7 @@ public:
 		{
 			vk::Fence const cbFencePresent = presentDrawBuffers_.fence[0][imageIndex];
 			device.waitForFences(cbFencePresent, VK_TRUE, umax);
-			device.resetFences(cbFencePresent);				// have to wait on associatted fence, and reset for next iteration
-
+			
 			vk::CommandBuffer const pb = *presentDrawBuffers_.cb[0][imageIndex];
 
 			vk::SubmitInfo submit{};
@@ -2495,6 +2493,8 @@ public:
 			submit.pCommandBuffers = &pb;				// submitting presents' static cb
 			submit.signalSemaphoreCount = 1;
 			submit.pSignalSemaphores = &ccSema;			// signalling commands complete
+
+			device.resetFences(cbFencePresent);				// have to wait on associatted fence, and reset for next iteration
 			graphicsQueue_.submit(1, &submit, cbFencePresent);
 		}
 	}
