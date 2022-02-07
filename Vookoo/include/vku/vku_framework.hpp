@@ -2471,7 +2471,9 @@ public:
 			submit.pCommandBuffers = &ob;				// submitting overlay's static cb
 			submit.signalSemaphoreCount = 0;
 			submit.pSignalSemaphores = nullptr;			// signalling commands complete
-			graphicsQueue_.submit(1, &submit, overlay_dynamic_fence[0]);	// ***overlay fence is reset here ok
+
+			// fence already reset in batched op above
+			graphicsQueue_.submit(1, &submit, overlay_dynamic_fence[0]);
 		}
 
 		//	graphics

@@ -3082,7 +3082,7 @@ public:
   }
 
   // For Immutable Simple 2D Texture resource
-  TextureImage2D(vk::Device device, uint32_t width, uint32_t height, vk::Format format = vk::Format::eB8G8R8A8Unorm, bool hostImage = false, bool const bDedicatedMemory = false) {
+  TextureImage2D(vk::Device const& __restrict device, uint32_t const width, uint32_t const height, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool hostImage = false, bool const bDedicatedMemory = false) {
 	  vk::ImageCreateInfo info;
 	  info.flags = {};
 	  info.imageType = vk::ImageType::e2D;
@@ -3100,7 +3100,7 @@ public:
 	  create(device, info, vk::ImageViewType::e2D, vk::ImageAspectFlagBits::eColor, hostImage, bDedicatedMemory);
   }
 
-  TextureImage2D(vk::Device device, uint32_t width, uint32_t height, uint32_t mipLevels=1, vk::Format format = vk::Format::eB8G8R8A8Unorm, bool hostImage = false, bool const bDedicatedMemory = false) {
+  TextureImage2D(vk::Device const& __restrict device, uint32_t const width, uint32_t const height, uint32_t const mipLevels=1, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool hostImage = false, bool const bDedicatedMemory = false) {
     vk::ImageCreateInfo info;
     info.flags = {};
     info.imageType = vk::ImageType::e2D;
