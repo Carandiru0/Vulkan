@@ -136,11 +136,17 @@ namespace vku {
 				for (auto& f : fence[i]) {
 					device.destroyFence(f);
 				}
-				
+				for (auto& c : cb[i]) {
+					c.reset();
+				}
 			}
 		}
-	};
 
+		CommandBufferContainer() = default;
+		CommandBufferContainer(vk::Device const& device, vk::CommandBufferAllocateInfo const& cbai) {
+			allocate(device, cbai);
+		}
+	};
 
 	// for avoiding lamda heap
 	typedef void const(* const execute_function)(vk::CommandBuffer&& __restrict);

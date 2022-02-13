@@ -97,6 +97,7 @@
 namespace vku {
 
 	extern VmaAllocator vma_;		//singleton - further initialized by vku_framework after device creation
+	extern tbb::concurrent_unordered_map<VkCommandPool, vku::CommandBufferContainer<1>> pool_;
 
 /// Printf-style formatting function.
 template <class ... Args>
@@ -107,22 +108,50 @@ std::string format(const char *fmt, Args... args) {
   return(fmt::format(fmt, args));
 }
 
+template<bool const bAsync = true>
 static inline void executeImmediately(vk::Device const& __restrict device, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue, std::function<void(vk::CommandBuffer cb)> const func) { // const std::function<void (vk::CommandBuffer cb)> 
-  vk::CommandBufferAllocateInfo const cbai{ commandPool, vk::CommandBufferLevel::ePrimary, 1 };
+    
+	static constexpr uint64_t const umax = nanoseconds(milliseconds(500)).count();
 
-	auto const& cbs = device.allocateCommandBuffers(cbai).value;
+	using pool_map = tbb::concurrent_unordered_map<VkCommandPool, vku::CommandBufferContainer<1>>;
 
-	cbs[0].begin(vk::CommandBufferBeginInfo{ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
-	func(cbs[0]);
-	cbs[0].end();
+	pool_map::const_iterator container(pool_.find(commandPool));
 
-	vk::SubmitInfo submit;
-	submit.commandBufferCount = (uint32_t)cbs.size();
-	submit.pCommandBuffers = cbs.data();
-	queue.submit(submit, vk::Fence{});
-	queue.waitIdle();
+	if (pool_.cend() == container) {
+		vk::CommandBufferAllocateInfo const cbai{ commandPool, vk::CommandBufferLevel::ePrimary, 2 }; // always allocating 2 command buffers on this command pools first usage
 
-	device.freeCommandBuffers(cbai.commandPool, cbs);
+		auto const [iter, success] = pool_.emplace(commandPool, CommandBufferContainer<1>(device, cbai));
+#ifndef NDEBUG
+		assert_print(success, "Could not allocate command buffer! FAIL");
+#endif
+		container = iter;
+	}
+
+	// try first command buffer, no waiting (fast path)
+	vk::CommandBuffer cb(*container->second.cb[0][0]);
+	vk::Fence cbFence(container->second.fence[0][0]);
+	
+	if (vk::Result::eTimeout == device.waitForFences(cbFence, VK_FALSE, 0)) {
+		// try second command buffer, waiting if neccessary
+		cb = *container->second.cb[0][1];
+		cbFence = container->second.fence[0][1];
+		device.waitForFences(cbFence, VK_TRUE, umax);
+	}
+
+	cb.begin(vk::CommandBufferBeginInfo{ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
+	func(cb);
+	cb.end();
+
+	vk::SubmitInfo submit{};
+	submit.commandBufferCount = 1;
+	submit.pCommandBuffers = &cb;
+
+	device.resetFences(cbFence);
+	queue.submit(submit, cbFence);
+	
+	if constexpr (!bAsync) {
+		queue.waitIdle();
+	}
 }
 
 /// Scale a value by mip level, but do not reduce to zero.
@@ -1464,7 +1493,7 @@ public:
 		  vku::GenericBuffer tmp(buf::eTransferSrc, maxsize, pfb::eHostCoherent | pfb::eHostVisible, VMA_MEMORY_USAGE_CPU_ONLY, false, false);
 		  tmp.clearLocal();
 
-		  vku::executeImmediately(device, commandPool, queue, [&](vk::CommandBuffer cb) {
+		  vku::executeImmediately<false>(device, commandPool, queue, [&](vk::CommandBuffer cb) {
 			  vk::BufferCopy bc{ 0, 0, maxsize };
 			  cb.copyBuffer(tmp.buffer(), buffer_, bc);
 		  });
@@ -1560,7 +1589,7 @@ public:
 	bActiveDelta = (activesizebytes_ != size);
 	activesizebytes_ = size;
 
-    vku::executeImmediately(device, commandPool, queue, [&](vk::CommandBuffer cb) {
+    vku::executeImmediately<false>(device, commandPool, queue, [&](vk::CommandBuffer cb) {
       vk::BufferCopy bc{ 0, 0, size};
       cb.copyBuffer(tmp.buffer(), buffer_, bc);
     });
@@ -2282,7 +2311,7 @@ public:
 	  stagingBuffer.updateLocal<T>(bytes, sizeLayer);
 
 	  // Copy the staging buffer to the GPU texture and set the layout.
-	  vku::executeImmediately(device, commandPool, queue, [&](vk::CommandBuffer cb) {
+	  vku::executeImmediately<false>(device, commandPool, queue, [&](vk::CommandBuffer cb) {
 		  auto bp = getBlockParams(s.info.format);
 		  vk::Buffer buf = stagingBuffer.buffer();
 		  
@@ -2299,13 +2328,35 @@ public:
 	  });
   }
 
+  // for a single layer upload, mipmapping levels not supported - only the source size for a layer of n bytes is considered. the target texture for upload must not have mipmaps, and should also enough layers (total layers > targetLayer)
+  template< bool const DoSetFinalLayout = true, vk::ImageLayout const FinalLayout = vk::ImageLayout::eShaderReadOnlyOptimal >
+  void upload(vk::Device device, vku::GenericBuffer const& __restrict stagingBuffer, uint32_t const targetLayer, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue) {
+
+	  // Copy the staging buffer to the GPU texture and set the layout.
+	  vku::executeImmediately(device, commandPool, queue, [&](vk::CommandBuffer cb) {
+		  auto bp = getBlockParams(s.info.format);
+		  vk::Buffer buf = stagingBuffer.buffer();
+
+		  auto width = mipScale(s.info.extent.width, 0);
+		  auto height = mipScale(s.info.extent.height, 0);
+		  auto depth = mipScale(s.info.extent.depth, 0);
+
+		  copy(cb, buf, 0, targetLayer, width, height, depth, 0);
+
+		  if constexpr (DoSetFinalLayout) {
+
+			  setLayout(cb, FinalLayout);
+		  }
+		  });
+  }
+
   template< bool const DoSetFinalLayout = true, vk::ImageLayout const FinalLayout = vk::ImageLayout::eShaderReadOnlyOptimal, typename T >
   void upload(vk::Device device, T const* const __restrict bytes, size_t const size, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue) {
 	  vku::GenericBuffer stagingBuffer((vk::BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc, (vk::DeviceSize)size, vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible, VMA_MEMORY_USAGE_CPU_ONLY);
 	  stagingBuffer.updateLocal<T>(bytes, size);
 
 	  // Copy the staging buffer to the GPU texture and set the layout.
-	  vku::executeImmediately(device, commandPool, queue, [&](vk::CommandBuffer cb) {
+	  vku::executeImmediately<false>(device, commandPool, queue, [&](vk::CommandBuffer cb) {
 		  auto bp = getBlockParams(s.info.format);
 		  vk::Buffer buf = stagingBuffer.buffer();
 		  uint32_t offset = 0;
@@ -3483,8 +3534,7 @@ private:
 };
 
 /// KTX files use OpenGL format values. This converts some common ones to Vulkan equivalents.
-static constexpr uint32_t const KTX_ENDIAN_REF(0x04030201);
-inline vk::Format GLtoVKFormat(uint32_t glFormat) {
+STATIC_INLINE_PURE vk::Format const GLtoVKFormat(uint32_t const glFormat) {
   switch (glFormat) {
     case 0x8229: return vk::Format::eR8Unorm;
     case 0x1903: return vk::Format::eR8Unorm;
@@ -3493,9 +3543,11 @@ inline vk::Format GLtoVKFormat(uint32_t glFormat) {
 	case 0x8227: return vk::Format::eR8G8Unorm;
 
     case 0x1907: return vk::Format::eR8G8B8Unorm; // GL_RGB
+	case 0x8C41: return vk::Format::eR8G8B8Srgb;  // GL_RGB
 
 	case 0x8058: return vk::Format::eR8G8B8A8Unorm; // GL_RGBA
     case 0x1908: return vk::Format::eR8G8B8A8Unorm; // GL_RGBA
+	case 0x8C43: return vk::Format::eR8G8B8A8Srgb; // GL_RGBA
 
     case 0x83F0: return vk::Format::eBc1RgbUnormBlock; // GL_COMPRESSED_RGB_S3TC_DXT1_EXT
     case 0x83F1: return vk::Format::eBc1RgbaUnormBlock; // GL_COMPRESSED_RGBA_S3TC_DXT1_EXT
@@ -3528,6 +3580,7 @@ public:
       return;
     }
 
+	static constexpr uint32_t const KTX_ENDIAN_REF(0x04030201);
     if (KTX_ENDIAN_REF != header.endianness) {
       swap(header.glType);
       swap(header.glTypeSize);
@@ -3640,7 +3693,7 @@ public:
 	stagingBuffer.updateLocal(pFileBegin + baseOffset, totalActualSize);
 
     // Copy the staging buffer to the GPU texture and set the layout.
-    vku::executeImmediately(device, commandPool, queue, [&](vk::CommandBuffer cb) {
+    vku::executeImmediately<false>(device, commandPool, queue, [&](vk::CommandBuffer cb) {
       vk::Buffer buf = stagingBuffer.buffer();
       for (uint32_t mipLevel = 0; mipLevel != mipLevels(); ++mipLevel) {
         auto width = this->width(mipLevel); 

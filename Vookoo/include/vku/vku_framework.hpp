@@ -872,7 +872,7 @@ public:
 		  // render checkerboard into stencil #########################################################################################################
 		  // must wait, device is only locked inside lambda. So any operations occuring on the main thread involving the device or queue
 		  // could be dangerous. This just so happens to occur at one of those times during init.
-		  vku::executeImmediately(device_, commandPool, queue, [&](vk::CommandBuffer cb) {
+		  vku::executeImmediately<false>(device_, commandPool, queue, [&](vk::CommandBuffer cb) {
 			
 			  VKU_SET_CMD_BUFFER_LABEL(cb, vkNames::CommandBuffer::CHECKERBOARD);
 
@@ -948,7 +948,7 @@ public:
 	  }
 
 	  {
-		  vk::CommandPoolCreateInfo cpci{ vk::CommandPoolCreateFlagBits::eTransient, graphicsQueueFamilyIndex };
+		  vk::CommandPoolCreateInfo cpci{ (vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer), graphicsQueueFamilyIndex };
 		  commandPool_[eCommandPools::TRANSIENT_POOL] = device.createCommandPoolUnique(cpci).value;
 	  }
 
