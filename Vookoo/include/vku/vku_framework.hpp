@@ -689,7 +689,7 @@ public:
 	  fmt::print(fg(fmt::color::lime_green), " < {:s} >" "  Double-Buffered\n", vk::to_string(swapchainPresentMode));
 
 	  swapinfo.surface = surface_;
-	  swapinfo.minImageCount = imageCount;		
+	  swapinfo.minImageCount = imageCount;	// everything is setup for double buffering, triple buffering does not work. less latency > more fps ?	
 	  swapinfo.imageFormat = swapchainImageFormat_;
 	  swapinfo.imageColorSpace = swapchainColorSpace_;
 	  swapinfo.imageExtent = surfaceCaps.surfaceCapabilities.currentExtent;
@@ -1060,21 +1060,33 @@ public:
 		  rpm.attachmentSamples(vku::DefaultSampleCount);								  
 		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eClear);							  
 		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eDontCare);		// not required to store - multisampled image is fully transient for this *renderpass*
-		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare); // is used only in subpass 2 for resolving the multisampled image
+		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare); 
 		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
 		  rpm.attachmentInitialLayout(vk::ImageLayout::eUndefined);
 		  rpm.attachmentFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);
+
+		  // The resolved second colour attachment.				     // 3
+		  rpm.attachmentBegin(mouseImage_.resolved.format());
+		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);
+		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eDontCare);
+		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eStore);				// store required for resolved image
+		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
+		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
+		  rpm.attachmentInitialLayout(vk::ImageLayout::eUndefined);
+		  rpm.attachmentFinalLayout(vk::ImageLayout::eTransferSrcOptimal);
 
 		  // A subpass to render using the above attachment
 		  rpm.subpassBegin(vk::PipelineBindPoint::eGraphics);
 		  rpm.subpassDepthStencilAttachment(vk::ImageLayout::eDepthStencilAttachmentOptimal, 0);	// optimal format (read/write) during subpass
 		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 1);
 		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 2);
+		  rpm.subpassResolveSkipAttachment(); // skip over 1st color attachment, only resolving mouse image:
+		  rpm.subpassResolveAttachment(vk::ImageLayout::eColorAttachmentOptimal, 3);
 
 		  // **** SUBPASS 1 - Depth buffer custom resolve //
 
 		  // The depth/stencil attachment.
-		  rpm.attachmentBegin(depthImage_.format());		// 3
+		  rpm.attachmentBegin(depthImage_.format());		// 4
 		  rpm.attachmentSamples(vku::DefaultSampleCount);
 		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eLoad);
 		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eStore); // used in later renderpass
@@ -1084,7 +1096,7 @@ public:
 		  rpm.attachmentFinalLayout(vk::ImageLayout::eDepthStencilReadOnlyOptimal);	// depth shall remain readonly for the rest of the frame
 
 		  // The only colour attachment.
-		  rpm.attachmentBegin(depthImageResolve_[0].format());		// 4
+		  rpm.attachmentBegin(depthImageResolve_[0].format());		// 5
 		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);
 		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eDontCare);
 		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eStore);
@@ -1095,37 +1107,8 @@ public:
 
 		  // A subpass to render using the above two attachments.
 		  rpm.subpassBegin(vk::PipelineBindPoint::eGraphics);
-		  rpm.subpassInputAttachment(vk::ImageLayout::eDepthStencilReadOnlyOptimal, 3);
-		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 4);
-
-		  // **** SUBPASS 2 - Mouse Image resolve //
-
-		  // The second colour attachment.				     		// 5
-		  rpm.attachmentBegin(mouseImage_.multisampled.format());
-		  rpm.attachmentSamples(vku::DefaultSampleCount);
-		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eLoad);
-		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eDontCare);
-		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
-		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
-		  rpm.attachmentInitialLayout(vk::ImageLayout::eColorAttachmentOptimal);
-		  rpm.attachmentFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);
-
-		  // The resolved second colour attachment.				     // 6
-		  rpm.attachmentBegin(mouseImage_.resolved.format());
-		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);
-		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eDontCare);
-		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eStore);				// store required for resolved image
-		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
-		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
-		  rpm.attachmentInitialLayout(vk::ImageLayout::eUndefined);
-		  rpm.attachmentFinalLayout(vk::ImageLayout::eTransferSrcOptimal);
-
-		  // A subpass to render using the above two attachments.
-		  rpm.subpassBegin(vk::PipelineBindPoint::eGraphics);
+		  rpm.subpassInputAttachment(vk::ImageLayout::eDepthStencilReadOnlyOptimal, 4);
 		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 5);
-		  rpm.subpassResolveAttachment(vk::ImageLayout::eColorAttachmentOptimal, 6);
-
-
 
 		  // A dependency to reset the layout of both attachments.
 		  rpm.dependencyBegin(VK_SUBPASS_EXTERNAL, 0);
@@ -1171,14 +1154,7 @@ public:
 		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
 
 		  // mouse resolve
-		  rpm.dependencyBegin(0, 2);
-		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
-		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
-		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
-		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eColorAttachmentRead);
-		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
-
-		  rpm.dependencyBegin(2, VK_SUBPASS_EXTERNAL);
+		  rpm.dependencyBegin(0, VK_SUBPASS_EXTERNAL);
 		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
 		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eTransfer);
 		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eColorAttachmentRead);
@@ -1193,9 +1169,8 @@ public:
 
 	  framebuffers_[eFrameBuffers::DEPTH] = new vk::UniqueFramebuffer[imageViews_.size()];
 	  for (int i = 0; i != imageViews_.size(); ++i) {
-		  vk::ImageView const attachments[7] = { depthImage_.imageView()/*cleared*/, colorImage_.imageView()/*cleared*/, mouseImage_.multisampled.imageView()/*cleared*/, 
-												 depthImage_.imageView(), depthImageResolve_[0].imageView(),
-												 mouseImage_.multisampled.imageView(), mouseImage_.resolved.imageView()
+		  vk::ImageView const attachments[6] = { depthImage_.imageView()/*cleared*/, colorImage_.imageView()/*cleared*/, mouseImage_.multisampled.imageView()/*cleared*/, mouseImage_.resolved.imageView(),
+												 depthImage_.imageView(), depthImageResolve_[0].imageView()
 											   };
 		  vk::FramebufferCreateInfo const fbci{ {}, *zPass_, _countof(attachments), attachments, width_, height_, 1 };
 		  framebuffers_[eFrameBuffers::DEPTH][i] = std::move(device.createFramebufferUnique(fbci).value);
@@ -2222,12 +2197,8 @@ public:
 		  resource_index{};		// **** only "compute, dynamic, post_submit_render" should use the resource_index, otherwise use imageIndex ******
 		  						// dynamic uses imageIndex, but uses resource_index to refer to the objects worked on in post_submit_render
 	  
-	  resource_control::stage_resources(resource_index);				
+	  resource_control::stage_resources(resource_index);		// <---- HOT PATH - CPU HOTSPOT //		
 
-	  // ###################################################### //
-	  async_long_task::wait<background_critical>(present_task_id, "present");  // bugfix: absolutely critical that this is done here, any other location results in validation THREADING errors
-	  // ####################################################### //
-	  
 	  vk::Semaphore const tcSema[2] = { *semaphores[resource_index].transferCompleteSemaphore_[0], *semaphores[resource_index].transferCompleteSemaphore_[1] };
 
 	  int64_t task_compute_light(0);
@@ -2371,6 +2342,10 @@ public:
 	  //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%//
 	  // ANY WORK THAT CAN BE DONE (COMPUTE, TRANSFERS, ANYTHING THAT DOES NOT DEPEND ON IMAGEINDEX) SHOULD BE DONE ABOVE //
 	  //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%//
+
+	  // ###################################################### //
+	  async_long_task::wait<background_critical>(present_task_id, "present"); // original location: line 2203 after stage resources. This line is a better location (async compute) - if threading errors from the validation layer arise then this needs to be moved back.
+	  // ####################################################### //
 
 	  vk::Result result(vk::Result::eSuccess);
 
