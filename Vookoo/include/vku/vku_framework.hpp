@@ -799,7 +799,7 @@ public:
 
 	  vku::ShaderModule const vert_{ device_, SHADER_PATH SHADER_POSTQUAD };
 
-	  for (uint32_t odd = 0; odd < eCheckerboard::_size(); ++odd)
+	  for (uint32_t odd = 0; odd < eCheckerboard::_size(); ++odd) // verified alternating checkerboard
 	  {
 		  // temporary framebuffer ###############################################################################################################
 		  vk::UniqueFramebuffer frameBuffer_checkered;
