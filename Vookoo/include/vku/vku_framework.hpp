@@ -984,8 +984,9 @@ public:
 		  // vk::ImageUsageFlagBits::eTransferDst no longer needed as temporal blending has been enabled for reconstruction (no clears!)
 		  colorVolumetricImage_.checkered = vku::TextureImageStorage2D(vk::ImageUsageFlagBits::eSampled /*| vk::ImageUsageFlagBits::eTransferDst*/, device, uint32_t(downResFrameBufferSz.x), uint32_t(downResFrameBufferSz.y), 1U, vk::SampleCountFlagBits::e1, vk::Format::eB8G8R8A8Unorm, false, true);  // not host image, is dedicated
 		  colorVolumetricImage_.resolved = vku::ColorAttachmentImage(device, uint32_t(downResFrameBufferSz.x), uint32_t(downResFrameBufferSz.y), vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, false, false, vk::Format::eB8G8R8A8Unorm);  // is sampled, not inputattachment, not copyable
-		  colorVolumetricImage_.upsampled = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, false, true, false, vk::Format::eB8G8R8A8Unorm);  // not sampled, is inputattachment, not copyable
-		  
+		  colorVolumetricImage_.upsampled = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, true, false, vk::Format::eB8G8R8A8Unorm, vk::ImageUsageFlagBits::eTransferDst);  // is sampled, is inputattachment, not copyable
+		  colorVolumetricImage_.upsampled.clear(device, transientCommandPool, graphicsQueue_); // temporally sampled image must ensure cleared for first usage.
+
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)colorVolumetricImage_.checkered.image(), vkNames::Image::colorVolumetricImage_checkered);
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)colorVolumetricImage_.resolved.image(), vkNames::Image::colorVolumetricImage_resolved);
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)colorVolumetricImage_.upsampled.image(), vkNames::Image::colorVolumetricImage_upsampled);
@@ -993,7 +994,8 @@ public:
 		  // reflections are captured in screen space (2D) on a half-res render target
 		  colorReflectionImage_.checkered = vku::TextureImageStorage2D(vk::ImageUsageFlagBits::eSampled /*| vk::ImageUsageFlagBits::eTransferDst*/, device, uint32_t(downResFrameBufferSz.x), uint32_t(downResFrameBufferSz.y), 1U, vk::SampleCountFlagBits::e1, vk::Format::eB8G8R8A8Unorm, false, true);  // not host image, is dedicated
 		  colorReflectionImage_.resolved = vku::ColorAttachmentImage(device, uint32_t(downResFrameBufferSz.x), uint32_t(downResFrameBufferSz.y), vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, false, false, vk::Format::eB8G8R8A8Unorm);  // is sampled, not inputattachment, not copyable
-		  colorReflectionImage_.upsampled = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, true, false, vk::Format::eB8G8R8A8Unorm);  // is sampled, is inputattachment, not copyable
+		  colorReflectionImage_.upsampled = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, true, false, vk::Format::eB8G8R8A8Unorm, vk::ImageUsageFlagBits::eTransferDst);  // is sampled, is inputattachment, not copyable
+		  colorReflectionImage_.upsampled.clear(device, transientCommandPool, graphicsQueue_); // temporally sampled image must ensure cleared for first usage.
 
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)colorReflectionImage_.checkered.image(), vkNames::Image::colorReflectionImage_checkered);
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)colorReflectionImage_.resolved.image(), vkNames::Image::colorReflectionImage_resolved);
@@ -1020,7 +1022,8 @@ public:
 			  colorVolumetricDownResCheckeredImage().setLayout(cb, vk::ImageLayout::eGeneral);
 			  colorReflectionDownResCheckeredImage().setLayout(cb, vk::ImageLayout::eGeneral);
 
-			  // reflection (upsampled) start up requirement
+			  // volumetric & reflection (upsampled) start up requirement
+			  colorVolumetricImage().setLayout(cb, vk::ImageLayout::eShaderReadOnlyOptimal);
 			  colorReflectionImage().setLayout(cb, vk::ImageLayout::eShaderReadOnlyOptimal);
 
 			  // gui images start up requirement
@@ -1232,12 +1235,11 @@ public:
 		  rpm.attachmentInitialLayout(vk::ImageLayout::eUndefined);
 		  rpm.attachmentFinalLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
 
-
 		  // A subpass to render using the above attachment.
 		  rpm.subpassBegin(vk::PipelineBindPoint::eGraphics);
 		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 2);
 		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 3);
-
+		  
 		  // stencil test readonly dependency
 		  rpm.dependencyBegin(VK_SUBPASS_EXTERNAL, 0);
 		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
@@ -1299,7 +1301,7 @@ public:
 		  vku::RenderpassMaker rpm;
 
 		  // *** SUBPASS 0 - Upsampling of haLF res volumetric pass & reflection
-		 // The colour attachment.
+		  // The colour attachment.
 		  rpm.attachmentBegin(colorVolumetricImage_.upsampled.format());					// 0
 		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);
 		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eDontCare);

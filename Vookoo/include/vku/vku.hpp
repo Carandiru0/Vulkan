@@ -2244,18 +2244,12 @@ public:
 
 	  return(*s.mipView[mipLevel]);
   }
-  /* map and unmap treating image like a linear buffer (only usable for staging images)
-  void * const __restrict map(const vk::Device & __restrict device, vk::DeviceSize size = 0) const {
-	  if (0 == size)
-		  size = VK_WHOLE_SIZE; //maxsizebytes_;
-
-	  return(device.mapMemory(*s.mem, 0, size, vk::MemoryMapFlags{}));
-  };
-  void unmap(const vk::Device & __restrict device) const { return device.unmapMemory(*s.mem); };
-  */
+  
+  // *** note this is the slow way of clearing an image in vulkan, do not use every frame - good for startup and periodic loading only *** //
+  
   // Clear the colour of an image. sets the transferdstoptimal layout by default, can be false for batching, etc
   template<bool const bSetLayout = true>
-  void clear(vk::CommandBuffer& __restrict cb, const std::array<uint32_t,4> color = {0, 0, 0, 0}) {
+  void clear(vk::CommandBuffer& __restrict cb, std::array<uint32_t,4> const color = {0, 0, 0, 0}) {
 
 	  if constexpr (bSetLayout) {
 		  setLayout(cb, vk::ImageLayout::eTransferDstOptimal);
@@ -2264,6 +2258,23 @@ public:
       cb.clearColorImage(s.image, vk::ImageLayout::eTransferDstOptimal, vk::ClearColorValue(color), range);
   }
   
+  // *** note this is the slow way of clearing an image in vulkan, do not use every frame - good for startup and periodic loading only *** //
+ 
+  // *** vk::ImageUsageFlagBits::eTransferDst REQUIRED *** does not require a command buffer, executes immediately, good for clearing images that have just been created. (ensure 100% clear image, not random noise. GPU ZeroMemory)
+  // leaves image in the layout it was originally in before the clear (no change)
+  void clear(vk::Device const& __restrict device, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue, std::array<uint32_t, 4> const color = { 0, 0, 0, 0 }) {
+
+	  vku::executeImmediately(device, commandPool, queue, [&](vk::CommandBuffer cb) {
+
+		  auto const original_layout(s.currentLayout);
+
+		  setLayout<true>(cb, vk::ImageLayout::eTransferDstOptimal);
+		  vk::ImageSubresourceRange const range{ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
+		  cb.clearColorImage(s.image, vk::ImageLayout::eTransferDstOptimal, vk::ClearColorValue(color), range);
+		  setLayout(cb, original_layout);
+
+	  });
+  }
   /// Copy another image to this one. This also changes the layout. SPECIFIC MIPLEVEL
   void copy(vk::CommandBuffer& __restrict cb, vku::GenericImage& __restrict srcImage, uint32_t const mipLevel) {
 	  srcImage.setLayout(cb, vk::ImageLayout::eTransferSrcOptimal);
@@ -3415,7 +3426,7 @@ public:
   ColorAttachmentImage() {
   }
 
-  ColorAttachmentImage(vk::Device device, uint32_t const width, uint32_t const height, vk::SampleCountFlagBits const msaaSamples, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue, bool const isSampled = false, bool const isInputAttachment = false, bool const isCopyable = false, vk::Format const format = vk::Format::eB8G8R8A8Unorm) {
+  ColorAttachmentImage(vk::Device device, uint32_t const width, uint32_t const height, vk::SampleCountFlagBits const msaaSamples, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue, bool const isSampled = false, bool const isInputAttachment = false, bool const isCopyable = false, vk::Format const format = vk::Format::eB8G8R8A8Unorm, vk::ImageUsageFlags const additional_flags = (vk::ImageUsageFlagBits)0 ) {
     vk::ImageCreateInfo info;
     info.flags = {};
 
@@ -3427,7 +3438,7 @@ public:
     info.samples = msaaSamples;
     info.tiling = vk::ImageTiling::eOptimal;
 	
-	info.usage = vk::ImageUsageFlagBits::eColorAttachment;
+	info.usage = vk::ImageUsageFlagBits::eColorAttachment | additional_flags;
 	if (isSampled) {
 		info.usage |= vk::ImageUsageFlagBits::eSampled;
 	}
