@@ -8,6 +8,11 @@
 //
 ////////////////////////////////////////////////////////////////////////////////
 
+// Additions & Fixes -
+// Jason Tully
+// 2022
+// (supports minimum spec Radeon 290, Hvidia GTX 970)
+
 #ifndef VKU_FRAMEWORK_HPP
 #define VKU_FRAMEWORK_HPP
 
@@ -262,7 +267,7 @@ public:
 	ADD_EXTENSION(extensions, dm, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME, memorybudget); // optional, can use internal tracking of memory in vma if not available
 	// internally promoted in vulkan 1.1 ADD_EXTENSION(extensions, dm, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, supported); if (!supported) return;
 	// internally promoted in vulkan 1.1 ADD_EXTENSION(extensions, dm, VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME, supported); if (!supported) return;
-	ADD_EXTENSION(extensions, dm, VK_EXT_GLOBAL_PRIORITY_EXTENSION_NAME, supported); if (!supported) return;
+	// *bugfix - NVIDIA does not support this extension. It's not really needed - all queue priorities were the same anyway. ADD_EXTENSION(extensions, dm, VK_EXT_GLOBAL_PRIORITY_EXTENSION_NAME, supported); if (!supported) return;
 	// internally promoted in vulkan 1.2 ADD_EXTENSION(extensions, dm, VK_KHR_8BIT_STORAGE_EXTENSION_NAME, supported); if (!supported) return;// The code:StorageBuffer8BitAccess capability must: be supported by all
 																										 // implementations of this extension, so no need to query further details as only ssbo 8bit is used. Uniform buffer objects with 8bit is not used.
 	
@@ -288,9 +293,10 @@ public:
 #endif
 
 	// Create ****QUEUES**** //
-    dm.queue<VK_QUEUE_GLOBAL_PRIORITY_REALTIME_EXT>(graphicsQueueFamilyIndex_);			// Add graphics queue as first queue for device
-	dm.queue<VK_QUEUE_GLOBAL_PRIORITY_REALTIME_EXT>(computeQueueFamilyIndex_, 2);		// 2 compute queues (support minimum spec Radeon 290, Hvidia GTX 970)
-	dm.queue<VK_QUEUE_GLOBAL_PRIORITY_REALTIME_EXT>(transferQueueFamilyIndex_, 2);		// Last, 2 transfer dma queues (supports minimum spec Radeon 290, Hvidia GTX 970)
+	// *bugfix - NVIDIA does not support this extension. It's not really needed - all queue priorities were the same anyway.
+    dm.queue(graphicsQueueFamilyIndex_);			// Add graphics queue as first queue for device
+	dm.queue(computeQueueFamilyIndex_, 2);			// 2 compute queues (support minimum spec Radeon 290, Hvidia GTX 970)
+	dm.queue(transferQueueFamilyIndex_, 2);			// Last, 2 transfer dma queues (supports minimum spec Radeon 290, Hvidia GTX 970)
 
 
 	// ################ start of pNext linked list chain for device creation

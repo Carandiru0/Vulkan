@@ -14,6 +14,12 @@
 /// It should integrate with game engines nicely.
 //
 ////////////////////////////////////////////////////////////////////////////////
+
+// Additions & Fixes -
+// Jason Tully
+// 2022
+// (supports minimum spec Radeon 290, Hvidia GTX 970)
+
 #pragma once
 #ifndef VKU_HPP
 #define VKU_HPP
@@ -526,7 +532,7 @@ public:
   }
 
   /// Add one or more queues to the device from a certain family.
-  template< VkQueueGlobalPriorityEXT const global_priority = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT >
+  //template< VkQueueGlobalPriorityEXT const global_priority = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT >	// *bugfix - NVIDIA does not support this extension. It's not really needed - all queue priorities were the same anyway.
   DeviceMaker &queue(uint32_t const familyIndex, uint32_t const n = 1u) {
     queue_priorities_.emplace_back(n, 1.0f);
 
@@ -534,16 +540,16 @@ public:
 										familyIndex, n,
 										queue_priorities_.back().data());
 
-	if constexpr(VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT != global_priority) {	// only if not default global priority
-
-		static VkDeviceQueueGlobalPriorityCreateInfoEXT global_priority_ext;	// static life time required for deferred init from this function
+	//if constexpr(VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT != global_priority) {	// only if not default global priority
+	//
+	//	static VkDeviceQueueGlobalPriorityCreateInfoEXT global_priority_ext;	// static life time required for deferred init from this function
 																				// only unique because of the template specialization
-		global_priority_ext.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_EXT;
-		global_priority_ext.globalPriority = global_priority;
-		global_priority_ext.pNext = nullptr;
+	//	global_priority_ext.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_EXT;
+	//	global_priority_ext.globalPriority = global_priority;
+	//	global_priority_ext.pNext = nullptr;
 
-		new_queue.pNext = &global_priority_ext;
-	}
+	//	new_queue.pNext = &global_priority_ext;
+	//}
     qci_.emplace_back(new_queue);
 
     return *this;
