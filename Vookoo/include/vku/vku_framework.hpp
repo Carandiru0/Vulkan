@@ -254,17 +254,20 @@ public:
 	PRINT_FEATURE(enabledFeatures.shaderStorageImageExtendedFormats, "extended compute image formats"); if (!enabledFeatures.shaderStorageImageExtendedFormats) return;
 	PRINT_FEATURE(enabledFeatures.vertexPipelineStoresAndAtomics, "vertex image ops"); if (!enabledFeatures.vertexPipelineStoresAndAtomics) return;	  // use of image operations in vertex shader requires this feature to be enabled
 	PRINT_FEATURE(enabledFeatures.fragmentStoresAndAtomics, "fragment image ops"); if (!enabledFeatures.fragmentStoresAndAtomics) return;	  // use of image operations in vertex shader requires this feature to be enabled
-
+	
     vku::DeviceMaker dm{};
     dm.defaultLayers();
 
 	// add extensions
-	bool supported(false), memorybudget(false);
+	bool supported(false), memorybudget(false), fullsubgroups(false);
 	auto const extensions = physical_device_.enumerateDeviceExtensionProperties().value;
 
 	// Required Extensions //
 	// internally promoted in vulkan 1.2 ADD_EXTENSION(extensions, dm, VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME, supported); if (!supported) return;
 	ADD_EXTENSION(extensions, dm, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME, memorybudget); // optional, can use internal tracking of memory in vma if not available
+	ADD_EXTENSION(extensions, dm, VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME, fullsubgroups); // optional, optimization for compute shader subgroup usage
+	ComputePipelineMaker::fullsubgroups_supported = fullsubgroups;
+
 	// internally promoted in vulkan 1.1 ADD_EXTENSION(extensions, dm, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, supported); if (!supported) return;
 	// internally promoted in vulkan 1.1 ADD_EXTENSION(extensions, dm, VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME, supported); if (!supported) return;
 	// *bugfix - NVIDIA does not support this extension. It's not really needed - all queue priorities were the same anyway. ADD_EXTENSION(extensions, dm, VK_EXT_GLOBAL_PRIORITY_EXTENSION_NAME, supported); if (!supported) return;
@@ -300,12 +303,23 @@ public:
 
 
 	// ################ start of pNext linked list chain for device creation
+	vk::PhysicalDeviceSubgroupSizeControlFeaturesEXT computeFullgroups{
+		VK_TRUE,
+		fullsubgroups
+	};
+	computeFullgroups.pNext = nullptr;
+
 	vk::PhysicalDevice8BitStorageFeatures byteStorage{
 		VK_TRUE,												 // - required (supportedByteStorage.storageBuffer8BitAccess) //
 		supportedByteStorage.uniformAndStorageBuffer8BitAccess,  // - optional //
 		supportedByteStorage.storagePushConstant8				 // - optional //
 	};
-	byteStorage.pNext = nullptr;
+	if (fullsubgroups) {
+		byteStorage.pNext = &computeFullgroups;
+	}
+	else {
+		byteStorage.pNext = nullptr;
+	}
 
 	vk::PhysicalDeviceVulkanMemoryModelFeatures memoryModel{
 		VK_TRUE,																 // - required (supportedMemoryModel.vulkanMemoryModel) //
@@ -460,7 +474,7 @@ private:
   bool ok_ = false;
 };
 
-
+								           
 BETTER_ENUM(eCommandPools, uint32_t const, DEFAULT_POOL = 0, OVERLAY_POOL, TRANSIENT_POOL, DMA_TRANSFER_POOL_PRIMARY, DMA_TRANSFER_POOL_SECONDARY, COMPUTE_POOL_PRIMARY, COMPUTE_POOL_SECONDARY);
 BETTER_ENUM(eFrameBuffers, uint32_t const, DEPTH, HALF_COLOR_ONLY, FULL_COLOR_ONLY, MID_COLOR_DEPTH, COLOR_DEPTH, PRESENT, OFFSCREEN);
 BETTER_ENUM(eOverlayBuffers, uint32_t const, TRANSFER, RENDER);
@@ -861,8 +875,8 @@ public:
 		  pm.back(stencilOp);
 
 		  // ################################
-		  pm.cullMode(vk::CullModeFlagBits::eFront);
-		  pm.frontFace(vk::FrontFace::eCounterClockwise);
+		  pm.cullMode(vk::CullModeFlagBits::eBack);
+		  pm.frontFace(vk::FrontFace::eClockwise);
 
 		  pm.blendBegin(VK_FALSE);
 		  pm.blendColorWriteMask((vk::ColorComponentFlagBits)0); // no color writes
@@ -954,7 +968,7 @@ public:
 	  }
 
 	  {
-		  vk::CommandPoolCreateInfo cpci{ (vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer), graphicsQueueFamilyIndex };
+		  vk::CommandPoolCreateInfo cpci{ vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer, graphicsQueueFamilyIndex };
 		  commandPool_[eCommandPools::TRANSIENT_POOL] = device.createCommandPoolUnique(cpci).value;
 	  }
 
@@ -1889,8 +1903,8 @@ public:
 	  typedef vk::CommandPoolCreateFlagBits ccbits;
 
 	  {
-		  vk::CommandPoolCreateInfo cpci{ ccbits::eTransient | ccbits::eResetCommandBuffer, graphicsQueueFamilyIndex };
-		  commandPool_[eCommandPools::DEFAULT_POOL] = device.createCommandPoolUnique(cpci).value;
+		  vk::CommandPoolCreateInfo cpci{ ccbits::eResetCommandBuffer, graphicsQueueFamilyIndex };
+		  commandPool_[eCommandPools::DEFAULT_POOL] = device.createCommandPoolUnique(cpci).value; // only pool that has non-transient command buffers (command buffers that are reused if there are no changes, until there are changes to warrant re-recording the command buffer)
 	  }
 	  {
 		  vk::CommandPoolCreateInfo cpci{ ccbits::eTransient | ccbits::eResetCommandBuffer, graphicsQueueFamilyIndex };
@@ -2023,7 +2037,7 @@ public:
   */
 
   static void defaultRenderFunc(vk::CommandBuffer cb, int imageIndex, vk::RenderPassBeginInfo const&rpbi) {
-    vk::CommandBufferBeginInfo bi{};
+    vk::CommandBufferBeginInfo bi{ vk::CommandBufferUsageFlagBits::eOneTimeSubmit };
     cb.begin(bi);
     cb.end();
   }
@@ -2197,7 +2211,7 @@ public:
 	  // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||                            |||||||||||||||||||||||||||||||||||||||||||||||||
 	  //
 	  // ------------------------------------------------------------------------------------------------------------------------------------------------------------
-
+	
 	  // utilize the time between a present() and acquireNextImage()
 	  static constexpr uint64_t const umax = nanoseconds(milliseconds(async_long_task::beats::half_second)).count();
 		
@@ -2354,7 +2368,7 @@ public:
 	  // ###################################################### //
 	  async_long_task::wait<background_critical>(present_task_id, "present"); // original location: line 2203 after stage resources. This line is a better location (async compute) - if threading errors from the validation layer arise then this needs to be moved back.
 	  // ####################################################### //
-
+	  
 	  vk::Result result(vk::Result::eSuccess);
 
 	  uint32_t imageIndex{};
@@ -2366,6 +2380,7 @@ public:
 		  if (fail_acquire_or_present(result, imageIndex, resource_index))
 			  return;
 	  }
+
 	  //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%//
 
 	if (bAsyncCompute) {
