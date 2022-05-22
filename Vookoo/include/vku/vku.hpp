@@ -1514,6 +1514,19 @@ public:
 		  });
 	  }
   }
+  
+  void createAsCPUToGPUBuffer(vk::DeviceSize const maxsize, bool const bPersistantMapping = false)
+  {
+	  if (maxsize == 0) return;
+	  using buf = vk::BufferUsageFlagBits;
+	  using pfb = vk::MemoryPropertyFlagBits;
+
+	  if (0 == maxsizebytes()) { // only allocate once
+		  *this = vku::GenericBuffer(buf::eTransferSrc, maxsize, pfb::eHostVisible, VMA_MEMORY_USAGE_CPU_TO_GPU, false, bPersistantMapping);
+		  activesizebytes_ = maxsizebytes();
+		  clearLocal();
+	  }
+  }
   void createAsStagingBuffer(vk::DeviceSize const maxsize, bool const bPersistantMapping = false)
   {
 	  if (maxsize == 0) return;

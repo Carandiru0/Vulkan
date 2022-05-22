@@ -52,7 +52,6 @@
 #undef min
 
 #include <array>
-#include <fstream>
 #include <vector>
 #include <chrono>
 #include <functional>

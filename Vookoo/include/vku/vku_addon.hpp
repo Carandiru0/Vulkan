@@ -113,7 +113,7 @@ namespace vku {
 			queued[index_wide].reserve(numBuffers);
 			recorded[index_wide].reserve(numBuffers);
 			
-			vk::CommandBufferBeginInfo bi{};
+			vk::CommandBufferBeginInfo bi(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
 			vk::FenceCreateInfo fci{};
 			fci.flags = vk::FenceCreateFlagBits::eSignaled;
 			for (uint32_t i = 0; i < numBuffers; ++i) {
