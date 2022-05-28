@@ -1461,7 +1461,7 @@ public:
   // for clearing staging buffers
   __SAFE_BUF void clearLocal() const {
       void* const __restrict ptr(map());
-      memset(ptr, 0, (size_t)maxsizebytes_);
+	  __memclr_stream<16>(ptr, (size_t)maxsizebytes_); // alignment is unknown, can only assume minimum 16 byte alignment
       unmap();
       flush(maxsizebytes_);
   }
@@ -1472,9 +1472,20 @@ public:
 	  T* const __restrict ptr( static_cast<T* const __restrict>(map()) );
 
 		if constexpr (bClear) {
-			memset(ptr, 0, (size_t)maxsizebytes_);  // not aligned
+
+			if constexpr (alignment >= 16) {
+				__memclr_stream<alignment>(ptr, (size_t)maxsizebytes_);		// alignment is known
+			}
+			else {
+				__memclr_stream<16>(ptr, (size_t)maxsizebytes_);			// alignment is unknown, can only assume minimum 16 byte alignment
+			}
 		}
-		memcpy(ptr, src, (size_t)size);
+		if constexpr (alignment >= 16) {
+			__memcpy_stream<alignment>(ptr, src, (size_t)size);				// alignment is known
+		}
+		else {
+			memcpy(ptr, src, (size_t)size);					// alignment is unknown, can only assume minimum 16 byte alignment
+		}
 
 	  unmap();
 	  flush(maxsizebytes_);
@@ -1515,7 +1526,7 @@ public:
 	  }
   }
   
-  void createAsCPUToGPUBuffer(vk::DeviceSize const maxsize, bool const bPersistantMapping = false)
+  void createAsCPUToGPUBuffer(vk::DeviceSize const maxsize, bool const bDedicatedMemory = false, bool const bPersistantMapping = false)
   {
 	  if (maxsize == 0) return;
 	  using buf = vk::BufferUsageFlagBits;
@@ -1527,7 +1538,7 @@ public:
 		  clearLocal();
 	  }
   }
-  void createAsStagingBuffer(vk::DeviceSize const maxsize, bool const bPersistantMapping = false)
+  void createAsStagingBuffer(vk::DeviceSize const maxsize, bool const bDedicatedMemory = false, bool const bPersistantMapping = false)
   {
 	  if (maxsize == 0) return;
 	  using buf = vk::BufferUsageFlagBits;
