@@ -68,6 +68,9 @@
 #include <Utility/async_long_task.h>
 
 #endif
+
+extern void setPresentationBlendWeight(uint32_t const); // workaround to get current blend weight for current imageIndex
+
 namespace vku {
 
 	static inline constexpr vk::SampleCountFlagBits const DefaultSampleCount(vk::SampleCountFlagBits::e4); // 4xMSAA guarenteed supported, higher not really needed and can be overriden in driver control panel (radeon/nvidia tweaking) by user if wanted to enhance at a great loss in performance
@@ -978,6 +981,11 @@ public:
 		  // only for simplifying this critical section / initialization of all color attachments, depth attachments for readability
 		  auto const& __restrict transientCommandPool = *commandPool_[eCommandPools::TRANSIENT_POOL];
 
+		  for (uint32_t i = 0; i < 2; ++i) {
+
+			  colorFrame_[i] = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, false, true, false, swapchainImageFormat_);	// not sampled, is inputattachment, not copyable
+          }
+		  
 		  colorImage_ = vku::ColorAttachmentImage(device, width_, height_, vku::DefaultSampleCount, transientCommandPool, graphicsQueue_, false, false, false, vk::Format::eB8G8R8A8Unorm);	// not sampled, not inputattachment, not copyable
 		  lastColorImage_ = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, false, false, vk::Format::eB8G8R8A8Unorm);	// is sampled, not inputattachment, not copyable
 		  depthImage_ = vku::DepthAttachmentImage(device, width_, height_, vku::DefaultSampleCount, transientCommandPool, graphicsQueue_, false, true);  // is inputattachment
@@ -1049,6 +1057,8 @@ public:
 			  guiImage(0).setLayout(cb, vk::ImageLayout::eShaderReadOnlyOptimal);
 			  guiImage(1).setLayout(cb, vk::ImageLayout::eShaderReadOnlyOptimal);
 
+			  // presentation startup state requirement - renderpass then takes over for every frame its good.
+			  colorFrame_[1].setLayout(cb, vk::ImageLayout::eShaderReadOnlyOptimal);
 			  });
 	  }
 	  // Build the renderpass using two attachments, colour and depth/stencil. (regular rendering pass)
@@ -1700,7 +1710,7 @@ public:
 		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
 		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
 		  rpm.attachmentInitialLayout(vk::ImageLayout::eUndefined);
-		  rpm.attachmentFinalLayout(vk::ImageLayout::ePresentSrcKHR);		// any attachment using imageViews_[i] attachments **stay on ePresentSrcKHR explicitly hereafter**
+		  rpm.attachmentFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);		
 
 		  // A subpass to render using the above attachment.
 		  rpm.subpassBegin(vk::PipelineBindPoint::eGraphics);
@@ -1715,8 +1725,8 @@ public:
 		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eStore);
 		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
 		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
-		  rpm.attachmentInitialLayout(vk::ImageLayout::ePresentSrcKHR);
-		  rpm.attachmentFinalLayout(vk::ImageLayout::ePresentSrcKHR);
+		  rpm.attachmentInitialLayout(vk::ImageLayout::eColorAttachmentOptimal);
+		  rpm.attachmentFinalLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
 
 		  // The input attachment. (gui 0)
 		  rpm.attachmentBegin(guiImage_.resolved[0].format());
@@ -1746,6 +1756,47 @@ public:
 		  rpm.subpassInputAttachment(vk::ImageLayout::eShaderReadOnlyOptimal, 2);
 		  rpm.subpassInputAttachment(vk::ImageLayout::eShaderReadOnlyOptimal, 3);
 
+
+		  // subpass2 - presentation //
+		  // The colour attachment. (resolved)
+		  rpm.attachmentBegin(swapchainImageFormat_);
+		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);					 // 4
+
+		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eDontCare);
+		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eStore);
+		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
+		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
+		  rpm.attachmentInitialLayout(vk::ImageLayout::eUndefined);
+		  rpm.attachmentFinalLayout(vk::ImageLayout::ePresentSrcKHR);		// any attachment using imageViews_[i] attachments **stay on ePresentSrcKHR explicitly hereafter**
+
+		  // The input attachment. (presentation 0)
+		  rpm.attachmentBegin(swapchainImageFormat_);
+		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);					// 5
+
+		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eLoad);
+		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eDontCare);
+		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
+		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
+		  rpm.attachmentInitialLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+		  rpm.attachmentFinalLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+
+		  // The input attachment. (presentation 1)
+		  rpm.attachmentBegin(swapchainImageFormat_);
+		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);					// 6
+
+		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eLoad);
+		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eDontCare);
+		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
+		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
+		  rpm.attachmentInitialLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+		  rpm.attachmentFinalLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+
+		  // A subpass to render using the above attachment.
+		  rpm.subpassBegin(vk::PipelineBindPoint::eGraphics);
+		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 4);
+		  rpm.subpassInputAttachment(vk::ImageLayout::eShaderReadOnlyOptimal, 5);
+		  rpm.subpassInputAttachment(vk::ImageLayout::eShaderReadOnlyOptimal, 6);
+
 		  /* Chapter 32 of Vulkan Spec
 		  When transitioning the image to VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR or VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, there is no need to delay subsequent processing, or perform any visibility operations (as vkQueuePresentKHR performs automatic visibility operations). To achieve this, the dstAccessMask member of the VkImageMemoryBarrier should be set to 0, and the dstStageMask parameter should be set to VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT.
 		  */
@@ -1768,10 +1819,17 @@ public:
 		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
 		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
 		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
-		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eColorAttachmentRead|vk::AccessFlagBits::eColorAttachmentWrite);
+		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite);
+		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
+		  
+		  rpm.dependencyBegin(1, 2);
+		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eFragmentShader);
+		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
+		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eInputAttachmentRead);
 		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
 
-		  rpm.dependencyBegin(1, VK_SUBPASS_EXTERNAL); // Out To Present
+		  rpm.dependencyBegin(2, VK_SUBPASS_EXTERNAL); // Out To Present
 		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
 		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eBottomOfPipe);
 		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eColorAttachmentRead);
@@ -1786,7 +1844,10 @@ public:
 
 	  framebuffers_[eFrameBuffers::PRESENT] = new vk::UniqueFramebuffer[imageViews_.size()];
 	  for (int i = 0; i != imageViews_.size(); ++i) {
-		  vk::ImageView const attachments[4] = { imageViews_[i], imageViews_[i], guiImage_.resolved[0].imageView(), guiImage_.resolved[1].imageView() };
+
+		  int const odd = i & 1; // auto-magical alternating (latest color frame used is always in first input attachment, last in second input attachment)
+
+		  vk::ImageView const attachments[7] = { colorFrame_[odd].imageView(), colorFrame_[odd].imageView(), guiImage_.resolved[0].imageView(), guiImage_.resolved[1].imageView(), imageViews_[i], colorFrame_[odd].imageView(), colorFrame_[!odd].imageView()};
 		  vk::FramebufferCreateInfo const fbci{ {}, *finalPass_, _countof(attachments), attachments, width_, height_, 1 };
 		  framebuffers_[eFrameBuffers::PRESENT][i] = std::move(device.createFramebufferUnique(fbci).value);
 
@@ -1890,12 +1951,15 @@ public:
 	  {
 		  vk::SemaphoreCreateInfo sci;
 		  for (uint32_t i = 0; i < 2; ++i) {
-			  semaphores[i].imageAcquireSemaphore_ = device.createSemaphoreUnique(sci).value;
-			  semaphores[i].commandCompleteSemaphore_ = device.createSemaphoreUnique(sci).value;
 			  semaphores[i].transferCompleteSemaphore_[0] = device.createSemaphoreUnique(sci).value;	// compute transfer
 			  semaphores[i].transferCompleteSemaphore_[1] = device.createSemaphoreUnique(sci).value;	// dynamic transfer
 			  semaphores[i].computeCompleteSemaphore_ = device.createSemaphoreUnique(sci).value;		// compute process light
 			  semaphores[i].staticCompleteSemaphore_ = device.createSemaphoreUnique(sci).value;			// static render
+		  }
+
+		  for (int i = 0; i != imageViews_.size(); ++i) {
+			  imageAcquireSemaphore_[i] = device.createSemaphoreUnique(sci).value;
+			  commandCompleteSemaphore_[i] = device.createSemaphoreUnique(sci).value;
 		  }
 	  }
 	  
@@ -2042,6 +2106,7 @@ public:
   }
 
   constinit static inline static_renderpass_function_unconst staticCommandCache{};
+  constinit static inline present_renderpass_function_unconst staticPresentCommandCache{};
 
   /// Build a static draw buffer. This will be rendered after any dynamic content generated in draw()
   void setStaticCommands(static_renderpass_function static_function, int32_t const iImageIndex = -1) {
@@ -2091,14 +2156,14 @@ public:
 			  rpbi[eFrameBuffers::MID_COLOR_DEPTH].framebuffer  = *framebuffers_[eFrameBuffers::MID_COLOR_DEPTH][image_index];
 			  rpbi[OFFSCREEN_OFFSET].framebuffer				= *framebuffers_[eFrameBuffers::OFFSCREEN][image_index];
 
-			  static_function(std::forward<static_renderpass&& __restrict>({ cb, image_index,
+			  static_function(std::forward<static_renderpass&& __restrict>({ cb, image_index & 1,
 				  std::move(rpbi[eFrameBuffers::DEPTH]), 
 				  std::move(rpbi[eFrameBuffers::HALF_COLOR_ONLY]), 
 				  std::move(rpbi[eFrameBuffers::FULL_COLOR_ONLY]), 
 				  std::move(rpbi[eFrameBuffers::MID_COLOR_DEPTH]), 
 				  std::move(rpbi[OFFSCREEN_OFFSET]) }));
 
-			  staticCommandsDirty_[image_index] = false;
+			  staticCommandsDirty_[image_index & 1] = false;
 		  }
 		  
 		  staticCommandCache = static_function;
@@ -2111,14 +2176,14 @@ public:
 		  rpbi[eFrameBuffers::MID_COLOR_DEPTH].framebuffer  = *framebuffers_[eFrameBuffers::MID_COLOR_DEPTH][iImageIndex];
 		  rpbi[OFFSCREEN_OFFSET].framebuffer				= *framebuffers_[eFrameBuffers::OFFSCREEN][iImageIndex];
 
-		  static_function(std::forward<static_renderpass&& __restrict>({ cb, (uint32_t const)iImageIndex,
+		  static_function(std::forward<static_renderpass&& __restrict>({ cb, (uint32_t const)iImageIndex & 1,
 			  std::move(rpbi[eFrameBuffers::DEPTH]), 
 			  std::move(rpbi[eFrameBuffers::HALF_COLOR_ONLY]), 
 			  std::move(rpbi[eFrameBuffers::FULL_COLOR_ONLY]), 
 			  std::move(rpbi[eFrameBuffers::MID_COLOR_DEPTH]), 
 			  std::move(rpbi[OFFSCREEN_OFFSET]) }));
 
-		  staticCommandsDirty_[iImageIndex] = false;
+		  staticCommandsDirty_[iImageIndex & 1] = false;
 	  }
   }
 
@@ -2135,7 +2200,7 @@ public:
   }
 
   /// Build a static draw buffer. This will be rendered after any dynamic content generated in draw()
-  void setStaticPresentCommands(present_renderpass_function present_function) {
+  void setStaticPresentCommands(present_renderpass_function present_function, int32_t const iImageIndex = -1) {
 
 	  vk::RenderPassBeginInfo rpbi;
 	  rpbi.renderPass = *finalPass_;
@@ -2143,18 +2208,30 @@ public:
 	  rpbi.clearValueCount = 0U;
 	  rpbi.pClearValues = nullptr;
 
-		for (uint32_t resource_index = 0; resource_index != presentDrawBuffers_.size(); ++resource_index) {
-			vk::CommandBuffer const cb = *presentDrawBuffers_.cb[0][resource_index];
-			rpbi.framebuffer = *framebuffers_[eFrameBuffers::PRESENT][resource_index];
+	  if (iImageIndex < 0) {
+		  for (uint32_t resource_index = 0; resource_index != presentDrawBuffers_.size(); ++resource_index) {
+			  vk::CommandBuffer const cb = *presentDrawBuffers_.cb[0][resource_index];
+			  rpbi.framebuffer = *framebuffers_[eFrameBuffers::PRESENT][resource_index];
 
-			present_function(std::forward<present_renderpass&& __restrict>({ cb, resource_index, std::move(rpbi) }));
-		}
+			  setPresentationBlendWeight(resource_index); /*important update of memory for push constants*/
+			  present_function(std::forward<present_renderpass&& __restrict>({ cb, resource_index & 1, std::move(rpbi) }));
+		  }
+
+		  staticPresentCommandCache = present_function;
+	  }
+	  else {
+		  vk::CommandBuffer const cb = *presentDrawBuffers_.cb[0][iImageIndex];
+		  rpbi.framebuffer = *framebuffers_[eFrameBuffers::PRESENT][iImageIndex];
+
+		  setPresentationBlendWeight(iImageIndex); /*important update of memory for push constants*/
+		  present_function(std::forward<present_renderpass&& __restrict>({ cb, uint32_t(iImageIndex) & 1, std::move(rpbi) }));
+	  }
   }
   
   void setGpuReadbackCommands(gpu_readback_function readback_function) {
 
 	  for (uint32_t resource_index = 0; resource_index != gpuReadbackBuffers_.size(); ++resource_index) {
-		  readback_function(*gpuReadbackBuffers_.cb[0][resource_index], resource_index);
+		  readback_function(*gpuReadbackBuffers_.cb[0][resource_index], resource_index & 1);
 	  }
   }
 #ifdef VKU_IMPLEMENTATION
@@ -2187,11 +2264,72 @@ public:
 		  return(bReturn); // indicating current render frame should be aborted and re attempted next frame
 	  }
 	  
+ private:
+	 static constexpr uint64_t const umax = nanoseconds(milliseconds(async_long_task::beats::half_second)).count();
+
+	  bool const presentation_acquire(const vk::Device& __restrict device, vk::Semaphore& __restrict iaSema, uint32_t& __restrict imageIndex, uint32_t& __restrict resource_index)
+	  {
+		  vk::Result result(vk::Result::eSuccess);
+
+		  iaSema = *imageAcquireSemaphore_[imageIndex];
+
+		  result = device.acquireNextImageKHR(*swapchain_, umax, iaSema, vk::Fence(), &imageIndex);	// **** driver does all of its waiting / spinning here blocking any further execution until ready!!!
+																													  // do any / all updates before this call to spend the time wisely
+		  [[unlikely]] if (vk::Result::eSuccess != result || vk::Result::eSuccess != _presentResult) {
+			  if (fail_acquire_or_present(result, imageIndex, resource_index))
+				  return(false);
+		  }
+
+		  return(true);
+      }
+
+	  void presentation(const vk::Device& __restrict device, vk::Semaphore& __restrict iaSema, vk::Semaphore& __restrict ccSema, uint32_t& __restrict imageIndex)
+	  {
+		  //----------// PRESENT (POST AA) FINAL SUBMIT // **waiting on nothing
+		  {
+			  vk::Fence const cbFencePresent = presentDrawBuffers_.fence[0][imageIndex];
+			  device.waitForFences(cbFencePresent, VK_TRUE, umax);
+
+			  setStaticPresentCommands(staticPresentCommandCache, imageIndex);
+
+			  vk::CommandBuffer const pb = *presentDrawBuffers_.cb[0][imageIndex];
+
+			  vk::PipelineStageFlags waitStages[1] = { vk::PipelineStageFlagBits::eVertexInput }; // wait at stage data is required
+
+			  vk::SubmitInfo submit{};
+			  if (iaSema) {
+				  submit.waitSemaphoreCount = 1;
+				  submit.pWaitSemaphores = &iaSema;
+				  submit.pWaitDstStageMask = waitStages;
+			  }
+			  submit.commandBufferCount = 1;
+			  submit.pCommandBuffers = &pb;				// submitting presents' static cb
+			  submit.signalSemaphoreCount = 1;
+			  submit.pSignalSemaphores = &ccSema;			// signalling commands complete
+
+			  device.resetFences(cbFencePresent);				// have to wait on associatted fence, and reset for next iteration
+			  graphicsQueue_.submit(1, &submit, cbFencePresent);
+		  }
+
+		  //	graphics
+		  // 	   |
+		  // 	graphics
+
+		  // ######## Present *currentframe* //
+		  vk::PresentInfoKHR presentInfo;
+		  presentInfo.pSwapchains = &(*swapchain_);
+		  presentInfo.swapchainCount = 1;
+		  presentInfo.pImageIndices = &imageIndex;
+		  presentInfo.waitSemaphoreCount = 1;
+		  presentInfo.pWaitSemaphores = &ccSema;		// waiting on completion 
+		  _presentResult = graphicsQueue_.presentKHR(presentInfo);		// submit/present to screen queue
+	  }
+
   public:
-  
+
   //*bugfix: this is a highly tuned function - do not change - very smooth motion and framerate
-  void draw(const vk::Device& __restrict device,
-	  compute_function gpu_compute, dynamic_renderpass_function dynamic_function, overlay_renderpass_function overlay_function) { 
+  uint32_t const draw(const vk::Device& __restrict device,
+	  compute_function gpu_compute, dynamic_renderpass_function dynamic_function, overlay_renderpass_function overlay_function) {     // returns the "free" resource index to use
 
 	  // [ RENDERGRAPH ]--------------------------------------------------------------------------------------------------------------------------------------------
 	  //  
@@ -2211,13 +2349,27 @@ public:
 	  //
 	  // ------------------------------------------------------------------------------------------------------------------------------------------------------------
 	
-	  // utilize the time between a present() and acquireNextImage()
-	  static constexpr uint64_t const umax = nanoseconds(milliseconds(async_long_task::beats::half_second)).count();
-		
+	  // utilize the time between a present() and acquireNextImage()		
+	  constinit static bool expect_frame_two(false);
+
 	  constinit static uint32_t
 		  resource_index{};		// **** only "compute, dynamic, post_submit_render" should use the resource_index, otherwise use imageIndex ******
 		  						// dynamic uses imageIndex, but uses resource_index to refer to the objects worked on in post_submit_render
 	  
+	  vk::Semaphore iaSema, ccSema; // set at right time, currently null
+	  uint32_t imageIndex(0);
+
+	  if (expect_frame_two) { // only on frame 2, imageIndex returned from presentation engine is expected to be 2
+
+		  expect_frame_two = false; // reset
+		  [[likely]] if (presentation_acquire(device, iaSema, imageIndex, resource_index)) {
+
+			  ccSema = *commandCompleteSemaphore_[imageIndex]; // required
+			  presentation(device, iaSema, ccSema, imageIndex);
+		  }
+		  return(resource_index); // resource index doesn't change for final swapchain image
+	  }
+
 	  resource_control::stage_resources(resource_index);		// <---- HOT PATH - CPU HOTSPOT //		
 
 	  vk::Semaphore const tcSema[2] = { *semaphores[resource_index].transferCompleteSemaphore_[0], *semaphores[resource_index].transferCompleteSemaphore_[1] };
@@ -2363,42 +2515,39 @@ public:
 	  //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%//
 	  // ANY WORK THAT CAN BE DONE (COMPUTE, TRANSFERS, ANYTHING THAT DOES NOT DEPEND ON IMAGEINDEX) SHOULD BE DONE ABOVE //
 	  //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%//
-
-	  // ###################################################### //
-	  async_long_task::wait<background_critical>(present_task_id, "present"); // original location: line 2203 after stage resources. This line is a better location (async compute) - if threading errors from the validation layer arise then this needs to be moved back.
-	  // ####################################################### //
-	  
-	  vk::Result result(vk::Result::eSuccess);
-
-	  uint32_t imageIndex{};
-	  vk::Semaphore const iaSema = *semaphores[resource_index].imageAcquireSemaphore_;
-
-	  result = device.acquireNextImageKHR(*swapchain_, umax, iaSema, vk::Fence(), &imageIndex);	// **** driver does all of its waiting / spinning here blocking any further execution until ready!!!
-																												  // do any / all updates before this call to spend the time wisely
-	  [[unlikely]] if (vk::Result::eSuccess != result || vk::Result::eSuccess != _presentResult) {
-		  if (fail_acquire_or_present(result, imageIndex, resource_index))
-			  return;
-	  }
+	  [[unlikely]] if (!presentation_acquire(device, iaSema, imageIndex, resource_index))
+		  return(resource_index); // doesn't change resource_index on failure in normal path (frames 0 & 1)
 
 	  //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%//
+
+	ccSema = *commandCompleteSemaphore_[imageIndex]; // required
+	vk::Semaphore const iatccSema[3] = { iaSema, tcSema[1], cSema };
+	vk::Semaphore const staticSema = *semaphores[imageIndex & 1].staticCompleteSemaphore_;
+
+	expect_frame_two = false; // reset
+	if (1 == imageIndex) {
+
+		expect_frame_two = true; // for next frame
+	}
+
+	if (2 == imageIndex) {
+		presentation(device, iaSema, ccSema, imageIndex);
+		return(resource_index); // resource index doesn't change for final swapchain image (frame 2)
+	}
+
 
 	if (bAsyncCompute) {
 		async_long_task::wait<background_critical>(task_compute_light, "compute light");
 	}
 
-	vk::Semaphore const ccSema = *semaphores[imageIndex].commandCompleteSemaphore_;
-
-	{
-		vk::Semaphore const iatccSema[3] = { iaSema, tcSema[1], cSema };
-		vk::Semaphore const staticSema = *semaphores[imageIndex].staticCompleteSemaphore_;
-
-//----------// STATIC SUBMIT // // **waiting on input acquire, textureshaders, upload & overlay, compute light
+	{ // graphics path
+		//----------// STATIC SUBMIT // // **waiting on input acquire, textureshaders, upload & overlay, compute light
 		{
 			vk::Fence const static_fence = staticDrawBuffers_.fence[0][imageIndex];
 
 			if (staticCommandsDirty_[imageIndex]) {
 				device.waitForFences(static_fence, VK_TRUE, umax);
-				
+
 				setStaticCommands(staticCommandCache, imageIndex);
 			}
 
@@ -2417,6 +2566,7 @@ public:
 			// ########### FRAMES FIRST USAGE OF GRAPHICS QUEUE ################ //
 			device.resetFences(static_fence);
 			graphicsQueue_.submit(1, &submit, static_fence);
+			iaSema = nullptr;  // unreference important
 		}
 
 		//	   graphics
@@ -2428,7 +2578,7 @@ public:
 			[=] {
 				vk::Fence const cbFenceReadback = gpuReadbackBuffers_.fence[0][imageIndex];
 				device.waitForFences(cbFenceReadback, VK_TRUE, umax);
-				
+
 				vk::CommandBuffer const gb = *gpuReadbackBuffers_.cb[0][imageIndex];
 				vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eTransfer };
 
@@ -2439,7 +2589,7 @@ public:
 				submit.commandBufferCount = 1;
 				submit.pCommandBuffers = &gb;				// submitting gpu readbacks' static cb
 				submit.signalSemaphoreCount = 0;
-				submit.pSignalSemaphores = nullptr;		
+				submit.pSignalSemaphores = nullptr;
 
 				device.resetFences(cbFenceReadback);				// have to wait on associatted fence, and reset for next iteration
 				transferQueue_[resource_index].submit(1, &submit, cbFenceReadback);
@@ -2448,7 +2598,7 @@ public:
 		//	graphics
 		// 	   |
 		// 	graphics
-	
+
 		// **inherent wait between graphics queue operations. they serialize and it is not neccessary to signal a semaphore as there is no inter-queue dependencies.
 
 //----------// OVERLAY SUBMIT // **waiting on overlay upload is not necessary as the wait has already taken place in static. The semaphore combines dynamic upload + overlay upload. Static depends on dynamic uploads completion. Single semaphore. Single signal & wait finished in STATIC.
@@ -2476,53 +2626,13 @@ public:
 		//	graphics
 		// 	   |
 		// 	graphics
+		presentation(device, iaSema, ccSema, imageIndex);
 
-//----------// PRESENT (POST AA) FINAL SUBMIT // **waiting on nothing
-		{
-			vk::Fence const cbFencePresent = presentDrawBuffers_.fence[0][imageIndex];
-			device.waitForFences(cbFencePresent, VK_TRUE, umax);
-			
-			vk::CommandBuffer const pb = *presentDrawBuffers_.cb[0][imageIndex];
-
-			vk::SubmitInfo submit{};
-			submit.waitSemaphoreCount = 0;
-			submit.pWaitSemaphores = nullptr;
-			submit.pWaitDstStageMask = nullptr;
-			submit.commandBufferCount = 1;
-			submit.pCommandBuffers = &pb;				// submitting presents' static cb
-			submit.signalSemaphoreCount = 1;
-			submit.pSignalSemaphores = &ccSema;			// signalling commands complete
-
-			device.resetFences(cbFencePresent);				// have to wait on associatted fence, and reset for next iteration
-			graphicsQueue_.submit(1, &submit, cbFencePresent);
-		}
 	}
-
-	//	graphics
-	// 	   |
-	// 	graphics
-
-	present_task_id = async_long_task::enqueue<background_critical>( // can be submitted w/o wait for task graphics as its the same queue and a semaphore also block execution waiting for graphics task completion.
-//--// non-blocking present		
-		[this, imageIndex, ccSema] {
-
-			// ######## Present *currentframe* //
-			vk::PresentInfoKHR presentInfo;
-			presentInfo.pSwapchains = &(*swapchain_);
-			presentInfo.swapchainCount = 1;
-			presentInfo.pImageIndices = &imageIndex;
-			presentInfo.waitSemaphoreCount = 1;
-			presentInfo.pWaitSemaphores = &ccSema;		// waiting on completion 
-			_presentResult = graphicsQueue_.presentKHR(presentInfo);		// submit/present to screen queue
-	});
-
 	// swapping resources
 	resource_index = !resource_index;
-  }
 
-  void WaitPresentIdle()
-  {
-	  async_long_task::wait<background_critical>(present_task_id, "present idle");
+	return(resource_index);
   }
 
 #endif
@@ -2626,8 +2736,8 @@ public:
   /// Return the swapchain object
   vk::SwapchainKHR const& __restrict swapchain() const { return(*swapchain_); }
 
-  /// Return the views of the swap chain images
-  std::vector<vk::ImageView> const& __restrict imageViews() const { return(imageViews_); }
+  /// Return the view of the frame image (not the swap chain images)
+  vk::ImageView const frameView(uint32_t const index) const { return(colorFrame_[index].imageView()); }
 
   /// Return the swap chain images
   std::vector<vk::Image> const& __restrict images() const { return(images_); }
@@ -2647,8 +2757,6 @@ private:
 		computeQueue_[2],
 		graphicsQueue_;
 
-	constinit static inline int64_t present_task_id{};
-
 	constinit static inline vk::Result _presentResult{};
 
   vk::Instance instance_;
@@ -2657,17 +2765,18 @@ private:
   vk::UniqueRenderPass zPass_, downPass_, upPass_, midPass_, overlayPass_, finalPass_, offscreenPass_;
   
   struct semaphores {
-	  vk::UniqueSemaphore imageAcquireSemaphore_;
-	  vk::UniqueSemaphore commandCompleteSemaphore_;
 	  vk::UniqueSemaphore staticCompleteSemaphore_;
 	  vk::UniqueSemaphore transferCompleteSemaphore_[2];
 	  vk::UniqueSemaphore computeCompleteSemaphore_;
 	  
   } semaphores[2];
-  
+
+  vk::UniqueSemaphore imageAcquireSemaphore_[3];
+  vk::UniqueSemaphore commandCompleteSemaphore_[3];
+
   vk::UniqueCommandPool		commandPool_[eCommandPools::_size()];
 
-  static constexpr uint32_t const MAX_IMAGE_VIEWS = 2U; // must be equal to 2, double buffered for some odd/even tricks with framebuffers and associated renderpasses
+  static constexpr uint32_t const MAX_IMAGE_VIEWS = 3U; // must be equal to 2, double buffered for some odd/even tricks with framebuffers and associated renderpasses
 
   std::vector<vk::ImageView> imageViews_;
   std::vector<vk::Image> images_;
@@ -2680,6 +2789,7 @@ private:
   CommandBufferContainer<1> presentDrawBuffers_;
   CommandBufferContainer<1> gpuReadbackBuffers_;
 
+  vku::ColorAttachmentImage colorFrame_[2];	  // presentation images
   vku::ColorAttachmentImage colorImage_;	  // multisampled only
   vku::ColorAttachmentImage lastColorImage_;  // not antialiased and does not contain GUI, for that use PostAA lastColorImage - cPostProcess->h
 

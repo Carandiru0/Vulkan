@@ -1533,7 +1533,7 @@ public:
 	  using pfb = vk::MemoryPropertyFlagBits;
 
 	  if (0 == maxsizebytes()) { // only allocate once
-		  *this = vku::GenericBuffer(buf::eTransferSrc, maxsize, pfb::eHostVisible, VMA_MEMORY_USAGE_CPU_TO_GPU, false, bPersistantMapping);
+		  *this = vku::GenericBuffer(buf::eTransferSrc, maxsize, pfb::eHostVisible, VMA_MEMORY_USAGE_CPU_TO_GPU, bDedicatedMemory, bPersistantMapping);
 		  activesizebytes_ = maxsizebytes();
 		  clearLocal();
 	  }
@@ -1545,7 +1545,7 @@ public:
 	  using pfb = vk::MemoryPropertyFlagBits;
 
 	  if (0 == maxsizebytes()) { // only allocate once
-		  *this = vku::GenericBuffer(buf::eTransferSrc, maxsize, pfb::eHostCoherent | pfb::eHostVisible, VMA_MEMORY_USAGE_CPU_ONLY, false, bPersistantMapping);
+		  *this = vku::GenericBuffer(buf::eTransferSrc, maxsize, pfb::eHostCoherent | pfb::eHostVisible, VMA_MEMORY_USAGE_CPU_ONLY, bDedicatedMemory, bPersistantMapping);
 		  activesizebytes_ = maxsizebytes();
 		  clearLocal();
 	  }
@@ -1559,7 +1559,7 @@ public:
 	  using pfb = vk::MemoryPropertyFlagBits;
 
 	  if (0 == stagingBuffer.maxsizebytes()) { // only allocate once
-		  stagingBuffer = vku::GenericBuffer(buf::eTransferSrc, maxsize, pfb::eHostCoherent | pfb::eHostVisible, VMA_MEMORY_USAGE_CPU_ONLY);
+		  stagingBuffer = vku::GenericBuffer(buf::eTransferSrc, maxsize, pfb::eHostCoherent | pfb::eHostVisible, VMA_MEMORY_USAGE_CPU_ONLY, false, true); // *bugfix - hidden options not exposed thru this path, default to persistant mapping.
 	  }
 	  stagingBuffer.updateLocal(value, size);
 	  bActiveDelta = (activesizebytes_ != size);
