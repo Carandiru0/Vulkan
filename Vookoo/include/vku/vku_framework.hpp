@@ -237,6 +237,7 @@ public:
 	vk::PhysicalDeviceFeatures enabledFeatures{};
 
 	enabledFeatures.geometryShader = supportedFeatures.features.geometryShader;
+	enabledFeatures.sampleRateShading = supportedFeatures.features.sampleRateShading;
 	enabledFeatures.depthClamp = supportedFeatures.features.depthClamp;
 	enabledFeatures.samplerAnisotropy = supportedFeatures.features.samplerAnisotropy;
 	//enabledFeatures.robustBufferAccess = supportedFeatures.robustBufferAccess; // safer but a lot slower good for debugging out of bounds access
@@ -249,6 +250,7 @@ public:
 	PRINT_FEATURE(supportedMemoryModel.vulkanMemoryModel, "vulkan memory model"); if (!supportedMemoryModel.vulkanMemoryModel) return;
 	PRINT_FEATURE(supportedByteStorage.storageBuffer8BitAccess, "storage buffer 8bit"); if (!supportedByteStorage.storageBuffer8BitAccess) return;
 	PRINT_FEATURE(enabledFeatures.geometryShader, "geometry shader"); if (!enabledFeatures.geometryShader) return;
+	PRINT_FEATURE(enabledFeatures.sampleRateShading, "sample shading"); if (!enabledFeatures.sampleRateShading) return;
 	PRINT_FEATURE(enabledFeatures.depthClamp, "depth clamping"); if (!enabledFeatures.depthClamp) return;
 	PRINT_FEATURE(enabledFeatures.samplerAnisotropy, "anisotropic filtering"); if (!enabledFeatures.samplerAnisotropy) return;
 	PRINT_FEATURE(enabledFeatures.textureCompressionBC, "texture compression"); if (!enabledFeatures.textureCompressionBC) return;
@@ -2289,9 +2291,9 @@ public:
 		  // 	   |
 		  // 	graphics
 
-		  async_long_task::enqueue<background_critical>(
+		  //async_long_task::enqueue<background_critical>(
 			  // non-blocking submit
-			  [=] {
+			  //[=] {
 				  // ######## Present *currentframe* //
 				  vk::PresentInfoKHR presentInfo;
 				  presentInfo.pSwapchains = &(*swapchain_);
@@ -2301,7 +2303,7 @@ public:
 				  presentInfo.pWaitSemaphores = &ccSema;		// waiting on completion 
 				  _presentResult = graphicsQueue_.presentKHR(presentInfo);		// submit/present to screen queue
 
-			  });
+			  //}); // *bugfix - may be causing intermittent flashing, geometry flashing/dissappearing. 
 	  }
 
   public:
@@ -2512,7 +2514,7 @@ public:
 		return(resource_index); // resource index doesn't change for final swapchain image (frame 2)
 	}
 	// **** imageIndex can safetly be assumed not equal to 2 from this point on **** //
-	
+		
 	vk::Semaphore const iatccSema[3] = { iaSema, tcSema[1], cSema };
 	vk::Semaphore const staticSema = *semaphores[imageIndex].staticCompleteSemaphore_;
 	
@@ -2540,7 +2542,7 @@ public:
 			submit.pSignalSemaphores = &staticSema;		// signalling static cb completion
 
 			// ########### FRAMES FIRST USAGE OF GRAPHICS QUEUE ################ //
-			if (bAsyncCompute) { // must ensure compute has started, was submitted prior to this graphics submission
+			if (bAsyncCompute) { // *bugfix - required - must ensure compute has started, was submitted prior to this graphics submission
 				async_long_task::wait<background_critical>(task_compute_light, "compute light");
 			}
 			device.resetFences(static_fence);

@@ -9,7 +9,7 @@ namespace vku
 	{
 		static constexpr uint32_t const count = 2u;
 
-		T					data[count];
+		T								data[count];
 
 		__declspec(safebuffers) __forceinline T const& __restrict operator[](uint32_t const i) const {
 			return(data[i]);

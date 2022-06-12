@@ -1461,7 +1461,7 @@ public:
   // for clearing staging buffers
   __SAFE_BUF void clearLocal() const {
       void* const __restrict ptr(map());
-	  __memclr_stream<16>(ptr, (size_t)maxsizebytes_); // alignment is unknown, can only assume minimum 16 byte alignment
+	  memset(ptr, 0, (size_t)maxsizebytes_);
       unmap();
       flush(maxsizebytes_);
   }
@@ -1471,24 +1471,37 @@ public:
   __SAFE_BUF void updateLocal(T const* const __restrict src, vk::DeviceSize const size) const {
 	  T* const __restrict ptr( static_cast<T* const __restrict>(map()) );
 
+	  uint32_t flush_size(size);
+	
 		if constexpr (bClear) {
 
 			if constexpr (alignment >= 16) {
-				__memclr_stream<alignment>(ptr, (size_t)maxsizebytes_);		// alignment is known
+				if (maxsizebytes_ > 4096) {
+					___memset_threaded<alignment>(ptr, 0, (size_t)maxsizebytes_);		// alignment is known
+				}
+				else {
+					memset(ptr, 0, (size_t)maxsizebytes_);							
+				}
 			}
 			else {
-				__memclr_stream<16>(ptr, (size_t)maxsizebytes_);			// alignment is unknown, can only assume minimum 16 byte alignment
+				memset(ptr, 0, (size_t)maxsizebytes_);			// alignment is unknown, can only assume minimum 16 byte alignment
 			}
+			flush_size = maxsizebytes_;
 		}
 		if constexpr (alignment >= 16) {
-			__memcpy_stream<alignment>(ptr, src, (size_t)size);				// alignment is known
+			if (size > 4096) {
+				___memcpy_threaded<alignment>(ptr, src, (size_t)size);				// alignment is known
+			}
+			else {
+				memcpy(ptr, src, (size_t)size);										
+			}
 		}
 		else {
-			memcpy(ptr, src, (size_t)size);					// alignment is unknown, can only assume minimum 16 byte alignment
+			memcpy(ptr, src, (size_t)size);									// alignment is unknown, can only assume minimum 16 byte alignment
 		}
 
 	  unmap();
-	  flush(maxsizebytes_);
+	  flush(flush_size);
   }
 
   /// For a host visible buffer, copy memory to the buffer object.
@@ -1698,9 +1711,15 @@ public:
   __SAFE_BUF void flush(vk::DeviceSize const bytes_flushed) const {
 	vmaFlushAllocation(vma_, allocation_, 0, bytes_flushed); // flushes memory only for this buffers memory
   }
+  __SAFE_BUF void flush() const {
+	  vmaFlushAllocation(vma_, allocation_, 0, maxsizebytes_); // flushes memory only for this buffers memory
+  }
 
-  __SAFE_BUF void invalidate(vk::DeviceSize const bytes_flushed) const {
-	vmaInvalidateAllocation(vma_, allocation_, 0, bytes_flushed); // invalidates memory only for this buffers memory
+  __SAFE_BUF void invalidate(vk::DeviceSize const bytes_invalidated) const {
+	vmaInvalidateAllocation(vma_, allocation_, 0, bytes_invalidated); // invalidates memory only for this buffers memory
+  }
+  __SAFE_BUF void invalidate() const {
+	vmaInvalidateAllocation(vma_, allocation_, 0, maxsizebytes_); // invalidates memory only for this buffers memory
   }
 
   void release()
