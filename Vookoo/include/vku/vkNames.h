@@ -12,6 +12,7 @@ namespace vkNames
 		[[maybe_unused]] static inline constexpr char const* const GPU_READBACK = "[cb] Gpu Readback";
 		[[maybe_unused]] static inline constexpr char const* const DYNAMIC = "[cb] Dynamic";
 		[[maybe_unused]] static inline constexpr char const* const PRESENT = "[cb] Present";
+		[[maybe_unused]] static inline constexpr char const* const CLEAR = "[cb] Clears";
 		[[maybe_unused]] static inline constexpr char const* const OVERLAY_RENDER = "[cb] Overlay Render";
 		[[maybe_unused]] static inline constexpr char const* const OVERLAY_TRANSFER = "[cb] Overlay Transfer";
 		[[maybe_unused]] static inline constexpr char const* const CHECKERBOARD = "[cb] Checkerboard";
@@ -19,6 +20,7 @@ namespace vkNames
 
 	namespace FrameBuffer
 	{
+		[[maybe_unused]] static inline constexpr char const* const CLEAR = "[fb] Clears";
 		[[maybe_unused]] static inline constexpr char const* const PRESENT = "[fb] Present";
 		[[maybe_unused]] static inline constexpr char const* const COLOR_DEPTH = "[fb] Color Depth";
 		[[maybe_unused]] static inline constexpr char const* const OFFSCREEN = "[fb] Offscreen Color Depth";
@@ -30,6 +32,7 @@ namespace vkNames
 
 	namespace Renderpass
 	{
+		[[maybe_unused]] static inline constexpr char const* const CLEAR = "[rp] Clears";
 		[[maybe_unused]] static inline constexpr char const* const FINAL = "[rp] Final";
 		[[maybe_unused]] static inline constexpr char const* const OVERLAY = "[rp] Overlay";
 		[[maybe_unused]] static inline constexpr char const* const OFFSCREEN = "[rp] Offscreen";
@@ -68,9 +71,6 @@ namespace vkNames
 		[[maybe_unused]] static inline constexpr char const* const LightMap_DistanceDirection = "[img] LightMap_DistanceDirection";
 		[[maybe_unused]] static inline constexpr char const* const LightMap_Color = "[img] LightMap_Color";
 		[[maybe_unused]] static inline constexpr char const* const LightMap_Reflection = "[img] LightMap_Reflection";
-		[[maybe_unused]] static inline constexpr char const* const LightMapHistory_DistanceDirection = "[img] LightMapHistory_DistanceDirection";
-		[[maybe_unused]] static inline constexpr char const* const LightMapHistory_Color = "[img] LightMapHistory_Color";
-		[[maybe_unused]] static inline constexpr char const* const LightMapHistory_Reflection = "[img] LightMapHistory_Reflection";
 		[[maybe_unused]] static inline constexpr char const* const OpacityMap = "[img] OpacityMap";
 	}
 

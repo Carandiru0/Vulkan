@@ -480,7 +480,7 @@ private:
 
 								           
 BETTER_ENUM(eCommandPools, uint32_t const, DEFAULT_POOL = 0, OVERLAY_POOL, TRANSIENT_POOL, DMA_TRANSFER_POOL_PRIMARY, DMA_TRANSFER_POOL_SECONDARY, COMPUTE_POOL_PRIMARY, COMPUTE_POOL_SECONDARY);
-BETTER_ENUM(eFrameBuffers, uint32_t const, DEPTH, HALF_COLOR_ONLY, FULL_COLOR_ONLY, MID_COLOR_DEPTH, COLOR_DEPTH, PRESENT, OFFSCREEN);
+BETTER_ENUM(eFrameBuffers, uint32_t const, DEPTH, HALF_COLOR_ONLY, FULL_COLOR_ONLY, MID_COLOR_DEPTH, COLOR_DEPTH, PRESENT, CLEAR, OFFSCREEN);
 BETTER_ENUM(eOverlayBuffers, uint32_t const, TRANSFER, RENDER);
 BETTER_ENUM(eComputeBuffers, uint32_t const, TRANSFER, TRANSFER_LIGHT, COMPUTE_LIGHT);
 
@@ -1839,7 +1839,28 @@ public:
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eFramebuffer, (VkFramebuffer)*framebuffers_[eFrameBuffers::PRESENT][i], vkNames::FrameBuffer::PRESENT);
 	  }
 
+	  // Clearing Pass to Async to Present
+	  {
+		  vku::RenderpassMaker rpm;
 
+		  // A subpass to render using the above attachment.
+		  rpm.subpassBegin(vk::PipelineBindPoint::eGraphics);
+		 
+		  // Use the maker object to construct the vulkan object
+		  clearPass_ = rpm.createUnique(device);
+
+		  VKU_SET_OBJECT_NAME(vk::ObjectType::eRenderPass, (VkRenderPass)*clearPass_, vkNames::Renderpass::CLEAR);
+	  }
+	
+	  framebuffers_[eFrameBuffers::CLEAR] = new vk::UniqueFramebuffer[max_image_count];
+	  for (int i = 0; i != max_image_count; ++i) {
+
+		  vk::FramebufferCreateInfo const fbci{ {}, *clearPass_, 0, nullptr, width_, height_, 1 };
+		  framebuffers_[eFrameBuffers::CLEAR][i] = std::move(device.createFramebufferUnique(fbci).value);
+
+		  VKU_SET_OBJECT_NAME(vk::ObjectType::eFramebuffer, (VkFramebuffer)*framebuffers_[eFrameBuffers::CLEAR][i], vkNames::FrameBuffer::CLEAR);
+	  }
+	
 	  // ###### Offscreen Special RenderPass
 	  // Build the renderpass using one attachment, colour   (mid/intermediatte pass)
 	  {
@@ -1997,6 +2018,10 @@ public:
 		  for (uint32_t resource_index = 0; resource_index < resource_count; ++resource_index) {
 			  VKU_SET_OBJECT_NAME(vk::ObjectType::eCommandBuffer, (VkCommandBuffer)*presentDrawBuffers_.cb[0][resource_index], vkNames::CommandBuffer::PRESENT);
 		  }
+		  clearDrawBuffers_.allocate(device, cbai);
+		  for (uint32_t resource_index = 0; resource_index < resource_count; ++resource_index) {
+			  VKU_SET_OBJECT_NAME(vk::ObjectType::eCommandBuffer, (VkCommandBuffer)*clearDrawBuffers_.cb[0][resource_index], vkNames::CommandBuffer::CLEAR);
+		  }
 	  }
 	  { // overlay render
 		  uint32_t const resource_count((uint32_t)double_buffer_count);
@@ -2125,7 +2150,7 @@ public:
 	  rpbi[eFrameBuffers::MID_COLOR_DEPTH].clearValueCount = 0;
 	  rpbi[eFrameBuffers::MID_COLOR_DEPTH].pClearValues = nullptr;
 
-	  static constexpr uint32_t const OFFSCREEN_OFFSET(eFrameBuffers::OFFSCREEN - 2);
+	  static constexpr uint32_t const OFFSCREEN_OFFSET(eFrameBuffers::OFFSCREEN - 3);
 	  rpbi[OFFSCREEN_OFFSET].renderPass = *offscreenPass_;
 	  rpbi[OFFSCREEN_OFFSET].renderArea = vk::Rect2D{ {0, 0}, {width_, height_} };
 	  rpbi[OFFSCREEN_OFFSET].clearValueCount = 1;
@@ -2183,8 +2208,10 @@ public:
 #endif
   }
 
+  constinit static inline present_renderpass_function_unconst presentstaticCommandCache{};
+
   /// Build a static draw buffer. 
-  void setStaticPresentCommands(present_renderpass_function present_function) { // only allowed to be called once
+  void setStaticPresentCommands(present_renderpass_function present_function, int32_t const iImageIndex = -1) { // only allowed to be called once
 
 	  vk::RenderPassBeginInfo rpbi;
 	  rpbi.renderPass = *finalPass_;
@@ -2192,12 +2219,59 @@ public:
 	  rpbi.clearValueCount = 0U;
 	  rpbi.pClearValues = nullptr;
 
-	  for (uint32_t resource_index = 0; resource_index != presentDrawBuffers_.size(); ++resource_index) {
-	     vk::CommandBuffer const cb = *presentDrawBuffers_.cb[0][resource_index];
-		 rpbi.framebuffer = *framebuffers_[eFrameBuffers::PRESENT][resource_index];
+	  if (iImageIndex < 0) {
+		  for (uint32_t resource_index = 0; resource_index != presentDrawBuffers_.size(); ++resource_index) {
+			  vk::CommandBuffer const cb = *presentDrawBuffers_.cb[0][resource_index];
+			  rpbi.framebuffer = *framebuffers_[eFrameBuffers::PRESENT][resource_index];
 
-		 setPresentationBlendWeight(resource_index); /*important update of memory for push constants*/
-		 present_function(std::forward<present_renderpass&& __restrict>({ cb, resource_index & 1, std::move(rpbi) }));
+			  setPresentationBlendWeight(resource_index); /*important update of memory for push constants*/
+			  present_function(std::forward<present_renderpass&& __restrict>({ cb, resource_index & 1, std::move(rpbi) }));
+		  }
+
+		  presentstaticCommandCache = present_function;
+	  }
+	  else if (2 != iImageIndex) { // only if not the "next frame"
+
+		  // required to update timing for both frames 0 & 1
+		  setPresentationBlendWeight(iImageIndex);
+		  // command buffer only needs to be rebuilt for frame 1, frame 0 & 2 command buffers never change since original recording. frame 1 has the adaptive blend ratio set in a push constant based off the timing of frames 0 and 1 (real frames)
+		  if (1 == iImageIndex) {
+			  vk::CommandBuffer const cb = *presentDrawBuffers_.cb[0][iImageIndex];
+			  rpbi.framebuffer = *framebuffers_[eFrameBuffers::PRESENT][iImageIndex];
+
+			  present_function(std::forward<present_renderpass&& __restrict>({ cb, (uint32_t)(iImageIndex & 1), std::move(rpbi) }));
+		  }
+
+	  }
+  }
+
+  constinit static inline clear_renderpass_function_unconst clearstaticCommandCache{};
+
+  /// Build a static draw buffer. 
+  void setStaticClearCommands(clear_renderpass_function clear_function, int32_t const iImageIndex = -1) { // only allowed to be called once
+
+	  vk::RenderPassBeginInfo clear_rpbi;
+	  clear_rpbi.renderPass = *clearPass_;
+	  clear_rpbi.renderArea = vk::Rect2D{ {0, 0}, {width_, height_} };
+	  clear_rpbi.clearValueCount = 0U;
+	  clear_rpbi.pClearValues = nullptr;
+	
+	  if (iImageIndex < 0) {
+		  for (uint32_t resource_index = 0; resource_index != presentDrawBuffers_.size(); ++resource_index) {
+
+			  vk::CommandBuffer const clear_cb = *clearDrawBuffers_.cb[0][resource_index];
+			  clear_rpbi.framebuffer = *framebuffers_[eFrameBuffers::CLEAR][resource_index];
+
+			  clear_function(std::forward<clear_renderpass&& __restrict>({ clear_cb, resource_index & 1, std::move(clear_rpbi)}));
+		  }
+
+		  clearstaticCommandCache = clear_function;
+	  }
+	  else { // clear command buffer should never need to be rebuilt at runtime. indirect command buffers are updated instead and uploaded to the gpu wayyy before this occurs (before early-z)
+		vk::CommandBuffer const clear_cb = *clearDrawBuffers_.cb[0][iImageIndex];
+		clear_rpbi.framebuffer = *framebuffers_[eFrameBuffers::CLEAR][iImageIndex];
+			
+		clear_function(std::forward<clear_renderpass&& __restrict>({clear_cb, (uint32_t)(iImageIndex & 1), std::move(clear_rpbi)}));	
 	  }
   }
   
@@ -2245,7 +2319,7 @@ public:
 		  constinit static uint32_t internal_count(0);
 		  
 	      vk::Result result(vk::Result::eSuccess);
-
+		
 		  iaSema = *imageAcquireSemaphore_[internal_count]; //*bugfix - internal_count allows for a unique input acquire semaphore per frame.
 
 		  result = device.acquireNextImageKHR(*swapchain_, umax, iaSema, vk::Fence(), &imageIndex);	// **** driver does all of its waiting / spinning here blocking any further execution until ready!!!
@@ -2268,6 +2342,8 @@ public:
 			  vk::Fence const cbFencePresent = presentDrawBuffers_.fence[0][imageIndex];
 			  device.waitForFences(cbFencePresent, VK_TRUE, umax);
 
+			  setStaticPresentCommands(presentstaticCommandCache, imageIndex);
+
 			  vk::CommandBuffer const pb = *presentDrawBuffers_.cb[0][imageIndex];
 
 			  vk::PipelineStageFlags waitStages[1] = { vk::PipelineStageFlagBits::eVertexInput }; // wait at stage data is required
@@ -2287,23 +2363,14 @@ public:
 			  graphicsQueue_.submit(1, &submit, cbFencePresent);
 		  }
 
-		  //	graphics
-		  // 	   |
-		  // 	graphics
-
-		  //async_long_task::enqueue<background_critical>(
-			  // non-blocking submit
-			  //[=] {
-				  // ######## Present *currentframe* //
-				  vk::PresentInfoKHR presentInfo;
-				  presentInfo.pSwapchains = &(*swapchain_);
-				  presentInfo.swapchainCount = 1;
-				  presentInfo.pImageIndices = &imageIndex;
-				  presentInfo.waitSemaphoreCount = 1;
-				  presentInfo.pWaitSemaphores = &ccSema;		// waiting on completion 
-				  _presentResult = graphicsQueue_.presentKHR(presentInfo);		// submit/present to screen queue
-
-			  //}); // *bugfix - may be causing intermittent flashing, geometry flashing/dissappearing. 
+		// ######## Present *currentframe* //
+		vk::PresentInfoKHR presentInfo;
+		presentInfo.pSwapchains = &(*swapchain_);
+		presentInfo.swapchainCount = 1;
+		presentInfo.pImageIndices = &imageIndex;
+		presentInfo.waitSemaphoreCount = 1;
+		presentInfo.pWaitSemaphores = &ccSema;		// waiting on completion 
+		_presentResult = graphicsQueue_.presentKHR(presentInfo);		// submit/present to screen queue
 	  }
 
   public:
@@ -2346,6 +2413,7 @@ public:
 		  [[likely]] if (presentation_acquire(device, iaSema, imageIndex, resource_index)) {
 
 			  ccSema = *commandCompleteSemaphore_[imageIndex]; // required
+			
 			  presentation(device, iaSema, ccSema, imageIndex);
 		  }
 		  return(resource_index); // resource index doesn't change for final swapchain image
@@ -2609,6 +2677,25 @@ public:
 		// 	graphics
 		presentation(device, iaSema, ccSema, imageIndex);
 
+		{ // clears - asynchronous to swap chain present
+
+			vk::Fence const cbFenceClear = clearDrawBuffers_.fence[0][imageIndex];
+			device.waitForFences(cbFenceClear, VK_TRUE, umax);
+			vk::CommandBuffer const cb = *clearDrawBuffers_.cb[0][imageIndex]; // previously written by setStaticPresentCommands (above)
+
+			vk::SubmitInfo submit{};
+			submit.waitSemaphoreCount = 0;
+			submit.pWaitSemaphores = nullptr;
+			submit.pWaitDstStageMask = 0;
+			submit.commandBufferCount = 1;
+			submit.pCommandBuffers = &cb;				// submitting clears' static cb
+			submit.signalSemaphoreCount = 0;
+			submit.pSignalSemaphores = nullptr;
+
+			device.resetFences(cbFenceClear);				// have to wait on associatted fence, and reset for next iteration
+			graphicsQueue_.submit(1, &submit, cbFenceClear);
+		}
+
 	}
 	// swapping resources
 	resource_index = !resource_index;
@@ -2628,6 +2715,7 @@ public:
   vk::RenderPass const& __restrict midPass() const { return(*midPass_); }
   vk::RenderPass const& __restrict overlayPass() const { return(*overlayPass_); }
   vk::RenderPass const& __restrict finalPass() const { return(*finalPass_); }
+  vk::RenderPass const& __restrict clearPass() const { return(*clearPass_); }
   vk::RenderPass const& __restrict offscreenPass() const { return(*offscreenPass_); }
 
   /// Destroy resources when shutting down.
@@ -2748,7 +2836,7 @@ private:
   vk::Instance instance_;
   vk::SurfaceKHR surface_;
   vk::UniqueSwapchainKHR swapchain_;
-  vk::UniqueRenderPass zPass_, downPass_, upPass_, midPass_, overlayPass_, finalPass_, offscreenPass_;
+  vk::UniqueRenderPass zPass_, downPass_, upPass_, midPass_, overlayPass_, finalPass_, clearPass_, offscreenPass_;
   
   struct semaphores {
 	  vk::UniqueSemaphore staticCompleteSemaphore_;
@@ -2771,6 +2859,7 @@ private:
   CommandBufferContainer<1> dynamicDrawBuffers_;
   CommandBufferContainer<eOverlayBuffers::_size()> overlayDrawBuffers_;	// one for transfer, one for rendering
   CommandBufferContainer<1> presentDrawBuffers_;
+  CommandBufferContainer<1> clearDrawBuffers_;
   CommandBufferContainer<1> gpuReadbackBuffers_;
 
   vku::ColorAttachmentImage colorFrame_[2];	  // presentation images
@@ -2820,7 +2909,7 @@ private:
   bool ok_ = false;
 
   vku::double_buffer<bool> staticCommandsDirty_{ false, false };
- 
+  
   // extensions enabled & active ? //
   bool bFullScreenExclusiveOn = false;
   bool bHDROn = false;

@@ -1471,7 +1471,7 @@ public:
   __SAFE_BUF void updateLocal(T const* const __restrict src, vk::DeviceSize const size) const {
 	  T* const __restrict ptr( static_cast<T* const __restrict>(map()) );
 
-	  uint32_t flush_size(size);
+	  vk::DeviceSize flush_size(size);
 	
 		if constexpr (bClear) {
 
@@ -1708,18 +1708,20 @@ public:
 	  vmaUnmapMemory(vma_, allocation_); 
   };
 
+// required after writing to memory (IF BUFFER is HOST COHERENT - flushing can be skipped)
   __SAFE_BUF void flush(vk::DeviceSize const bytes_flushed) const {
-	vmaFlushAllocation(vma_, allocation_, 0, bytes_flushed); // flushes memory only for this buffers memory
+	  vmaFlushAllocation(vma_, allocation_, 0, bytes_flushed); // flushes memory only for this buffers memory
   }
   __SAFE_BUF void flush() const {
 	  vmaFlushAllocation(vma_, allocation_, 0, maxsizebytes_); // flushes memory only for this buffers memory
   }
 
+  // required before reading memory (IF BUFFER is HOST COHERENT - invalidation can be skipped)
   __SAFE_BUF void invalidate(vk::DeviceSize const bytes_invalidated) const {
-	vmaInvalidateAllocation(vma_, allocation_, 0, bytes_invalidated); // invalidates memory only for this buffers memory
+	  vmaInvalidateAllocation(vma_, allocation_, 0, bytes_invalidated); // invalidates memory only for this buffers memory
   }
   __SAFE_BUF void invalidate() const {
-	vmaInvalidateAllocation(vma_, allocation_, 0, maxsizebytes_); // invalidates memory only for this buffers memory
+	  vmaInvalidateAllocation(vma_, allocation_, 0, maxsizebytes_); // invalidates memory only for this buffers memory
   }
 
   void release()

@@ -194,6 +194,18 @@ namespace vku {
 
 
 	typedef struct {
+		
+		vk::CommandBuffer cb;
+		uint32_t resource_index;
+
+		vk::RenderPassBeginInfo&& __restrict rpbi;
+		
+	} clear_renderpass;
+	typedef void(* const clear_renderpass_function)(clear_renderpass&& __restrict);
+	typedef void(*clear_renderpass_function_unconst)(clear_renderpass&& __restrict);
+	
+	typedef struct {
+				
 		vk::CommandBuffer cb;
 		uint32_t resource_index;
 
