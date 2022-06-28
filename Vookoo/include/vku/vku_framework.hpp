@@ -2403,160 +2403,150 @@ public:
 	  constinit static uint32_t
 		  resource_index{};		// **** only "compute, dynamic, post_submit_render" should use the resource_index, otherwise use imageIndex ******
 		  						// dynamic uses imageIndex, but uses resource_index to refer to the objects worked on in post_submit_render
-	  
+	
+	  vk::Semaphore const tcSema[2]{ *semaphores[resource_index].transferCompleteSemaphore_[0], *semaphores[resource_index].transferCompleteSemaphore_[1] };
+	  vk::Semaphore const cSema{ *semaphores[resource_index].computeCompleteSemaphore_ };
 	  vk::Semaphore iaSema, ccSema; // set at right time, currently null
-	  uint32_t imageIndex(0);
-
-	  if (expect_frame_two) { // only on frame 2, imageIndex returned from presentation engine is expected to be 2
-
-		  expect_frame_two = false; // reset
-		  [[likely]] if (presentation_acquire(device, iaSema, imageIndex, resource_index)) {
-
-			  ccSema = *commandCompleteSemaphore_[imageIndex]; // required
-			
-			  presentation(device, iaSema, ccSema, imageIndex);
-		  }
-		  return(resource_index); // resource index doesn't change for final swapchain image
-	  }
-
-	  resource_control::stage_resources(resource_index);		// <---- HOT PATH - CPU HOTSPOT //		
-
-	  vk::Semaphore const tcSema[2] = { *semaphores[resource_index].transferCompleteSemaphore_[0], *semaphores[resource_index].transferCompleteSemaphore_[1] };
-
-	  int64_t task_compute_light(0);
-
-	  vk::Semaphore const cSema = { *semaphores[resource_index].computeCompleteSemaphore_ };
-	  bool bAsyncCompute(false);
-
-	  //----// UPLOAD (LIGHT) // // **waiting on nothing
-	  {
-		  vk::Fence const dma_transfer_fence = computeDrawBuffers_.fence[eComputeBuffers::TRANSFER][resource_index]; // only one fence is required for the submission of TRANSFER and TRANSFER_LIGHT command buffers.
-		  if (computeDrawBuffers_.queued[eComputeBuffers::TRANSFER][resource_index]) {
-			  device.waitForFences(dma_transfer_fence, VK_TRUE, umax);			// protect
-			  computeDrawBuffers_.queued[eComputeBuffers::TRANSFER][resource_index] = false; // reset
-		  }
-		  computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = false; // reset
-
-		  vk::CommandBuffer const compute_uploads[3] = { *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER][resource_index], *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER_LIGHT][resource_index], nullptr };
-
-		  // upload light
-		  bool const upload_light = gpu_compute(std::forward<compute_pass&& __restrict>({ compute_uploads[eComputeBuffers::TRANSFER], compute_uploads[eComputeBuffers::TRANSFER_LIGHT], compute_uploads[eComputeBuffers::COMPUTE_LIGHT], resource_index }));
-
-		  // COMPUTE DMA TRANSFER SUBMIT //
-		  
-		  vk::SubmitInfo submit{};																	
-		  submit.waitSemaphoreCount = 0;
-		  submit.pWaitSemaphores = nullptr;			// **waiting on nothing
-		  submit.pWaitDstStageMask = nullptr;
-		  submit.commandBufferCount = 1 + (uint32_t)upload_light;				// submitting dma cb
-		  submit.pCommandBuffers = &compute_uploads[eComputeBuffers::TRANSFER];
-		  submit.signalSemaphoreCount = (uint32_t)upload_light;
-		  submit.pSignalSemaphores = upload_light ? &tcSema[0] : nullptr;			// signal for compute
-
-		  device.resetFences(dma_transfer_fence);
-		  transferQueue_[resource_index].submit(1, &submit, dma_transfer_fence);
-
-		  computeDrawBuffers_.queued[eComputeBuffers::TRANSFER][resource_index] = true;
-
-		  if (upload_light) {
-			//--------------// COMPUTE SUBMIT (LIGHT) // // **waiting on upload light
-			computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = true;
-			bAsyncCompute = true;
-
-			task_compute_light = async_long_task::enqueue<background_critical>(
-			// non-blocking submit
-			[=] {
-				vk::CommandBuffer const compute_process[3] = { nullptr, nullptr, *computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_LIGHT][resource_index] };
-
-				vk::Fence const compute_fence = computeDrawBuffers_.fence[eComputeBuffers::COMPUTE_LIGHT][resource_index];
-				if (computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index]) {
-					device.waitForFences(compute_fence, VK_TRUE, umax);
-					computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index] = false; // reset
-				}
-
-				gpu_compute(std::forward<compute_pass&& __restrict>({ compute_process[eComputeBuffers::TRANSFER], compute_process[eComputeBuffers::TRANSFER_LIGHT], compute_process[eComputeBuffers::COMPUTE_LIGHT], resource_index }));    // compute part resets the dirty state that transfer set
-
-				vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eComputeShader };
-
-				vk::SubmitInfo submit{};
-				submit.waitSemaphoreCount = (uint32_t)computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index];
-				submit.pWaitSemaphores = &tcSema[0];				// waiting on transfer completion only if transfer in progress, otherwise waiting on nothing
-				submit.pWaitDstStageMask = &waitStages;
-				submit.commandBufferCount = 1;
-				submit.pCommandBuffers = &compute_process[eComputeBuffers::COMPUTE_LIGHT];				// submitting compute cb
-				submit.signalSemaphoreCount = 1;
-				submit.pSignalSemaphores = &cSema;			// signalling compute cb completion
-
-				device.resetFences(compute_fence);
-				computeQueue_[resource_index].submit(1, &submit, compute_fence);
-
-				computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index] = true;
-			});
-		  }
-	  }
-
-	  //----// UPLOAD & OVERLAY // // **waiting on nothing
+	
 	  vk::Fence const overlay_dynamic_fence[2]{ overlayDrawBuffers_.fence[eOverlayBuffers::TRANSFER][resource_index], dynamicDrawBuffers_.fence[0][resource_index] };   // bugfix: now properly double-buffered, no longer serializes frame by having 0 here instead of resource_index!
-	  {
-		  device.waitForFences(2, overlay_dynamic_fence, VK_TRUE, umax);				// protect 
-		  
-		  vk::CommandBuffer do_cb[2] = { *dynamicDrawBuffers_.cb[0][resource_index], *overlayDrawBuffers_.cb[eOverlayBuffers::TRANSFER][resource_index] };
 
-		  { // ######### begin overlay transfer cb update (spawned)
-			  // staging
-			  overlay_function(std::forward<overlay_renderpass&& __restrict>({ &do_cb[1], nullptr, resource_index, std::forward<vk::RenderPassBeginInfo&& __restrict>(vk::RenderPassBeginInfo{}) }));		// submission of staged data to gpu // build transfer cb
-		  }
+	  uint32_t imageIndex(0);
+	  int64_t task_compute_light(0);
+	  bool bAsyncCompute(false);
+	
+	  if (!expect_frame_two) { // all of this can safetly be skipped on frame 2
 
-		  { // ######### begin dynamic transfer cb update (main thread)
-			  // staging
-			  dynamic_function(std::forward<dynamic_renderpass&&>({ do_cb[0], resource_index }));	// submission of staged data to gpu
-		  }
+		  resource_control::stage_resources(resource_index);		// <---- HOT PATH - CPU HOTSPOT //		
 
-		  // DYNAMIC & OVERLAY DYNAMIC SUBMIT //
+		  //----// UPLOAD (LIGHT) // // **waiting on nothing
 		  {
+			  vk::Fence const dma_transfer_fence = computeDrawBuffers_.fence[eComputeBuffers::TRANSFER][resource_index]; // only one fence is required for the submission of TRANSFER and TRANSFER_LIGHT command buffers.
+			  if (computeDrawBuffers_.queued[eComputeBuffers::TRANSFER][resource_index]) {
+				  device.waitForFences(dma_transfer_fence, VK_TRUE, umax);			// protect
+				  computeDrawBuffers_.queued[eComputeBuffers::TRANSFER][resource_index] = false; // reset
+			  }
+			  computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = false; // reset
+
+			  vk::CommandBuffer const compute_uploads[3] = { *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER][resource_index], *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER_LIGHT][resource_index], nullptr };
+
+			  // upload light
+			  bool const upload_light = gpu_compute(std::forward<compute_pass&& __restrict>({ compute_uploads[eComputeBuffers::TRANSFER], compute_uploads[eComputeBuffers::TRANSFER_LIGHT], compute_uploads[eComputeBuffers::COMPUTE_LIGHT], resource_index }));
+
+			  // COMPUTE DMA TRANSFER SUBMIT //
+
 			  vk::SubmitInfo submit{};
 			  submit.waitSemaphoreCount = 0;
-			  submit.pWaitSemaphores = nullptr;				// **waiting on nothing
+			  submit.pWaitSemaphores = nullptr;			// **waiting on nothing
 			  submit.pWaitDstStageMask = nullptr;
-			  submit.commandBufferCount = 2;				// submitting dynamic cb & overlay's dynamic cb
-			  submit.pCommandBuffers = do_cb;
-			  submit.signalSemaphoreCount = 1;
-			  submit.pSignalSemaphores = &tcSema[1];			// signal for dynamic cb in slot 0, signal for overlay dynamic cb in slot 1 (completion)
+			  submit.commandBufferCount = 1 + (uint32_t)upload_light;				// submitting dma cb
+			  submit.pCommandBuffers = &compute_uploads[eComputeBuffers::TRANSFER];
+			  submit.signalSemaphoreCount = (uint32_t)upload_light;
+			  submit.pSignalSemaphores = upload_light ? &tcSema[0] : nullptr;			// signal for compute
 
-			  device.resetFences(2, overlay_dynamic_fence);
-			  transferQueue_[!resource_index].submit(1, &submit, overlay_dynamic_fence[1]); // <---- this is opposite transfer queue on purpose so dma transfers are simultaneous
+			  device.resetFences(dma_transfer_fence);
+			  transferQueue_[resource_index].submit(1, &submit, dma_transfer_fence);
+
+			  computeDrawBuffers_.queued[eComputeBuffers::TRANSFER][resource_index] = true;
+
+			  if (upload_light) {
+				  //--------------// COMPUTE SUBMIT (LIGHT) // // **waiting on upload light
+				  computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = true;
+				  bAsyncCompute = true;
+
+				  task_compute_light = async_long_task::enqueue<background_critical>(
+					  // non-blocking submit
+					  [=] {
+						  vk::CommandBuffer const compute_process[3] = { nullptr, nullptr, *computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_LIGHT][resource_index] };
+
+						  vk::Fence const compute_fence = computeDrawBuffers_.fence[eComputeBuffers::COMPUTE_LIGHT][resource_index];
+						  if (computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index]) {
+							  device.waitForFences(compute_fence, VK_TRUE, umax);
+							  computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index] = false; // reset
+						  }
+
+						  gpu_compute(std::forward<compute_pass&& __restrict>({ compute_process[eComputeBuffers::TRANSFER], compute_process[eComputeBuffers::TRANSFER_LIGHT], compute_process[eComputeBuffers::COMPUTE_LIGHT], resource_index }));    // compute part resets the dirty state that transfer set
+
+						  vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eComputeShader };
+
+						  vk::SubmitInfo submit{};
+						  submit.waitSemaphoreCount = (uint32_t)computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index];
+						  submit.pWaitSemaphores = &tcSema[0];				// waiting on transfer completion only if transfer in progress, otherwise waiting on nothing
+						  submit.pWaitDstStageMask = &waitStages;
+						  submit.commandBufferCount = 1;
+						  submit.pCommandBuffers = &compute_process[eComputeBuffers::COMPUTE_LIGHT];				// submitting compute cb
+						  submit.signalSemaphoreCount = 1;
+						  submit.pSignalSemaphores = &cSema;			// signalling compute cb completion
+
+						  device.resetFences(compute_fence);
+						  computeQueue_[resource_index].submit(1, &submit, compute_fence);
+
+						  computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index] = true;
+					  });
+			  }
 		  }
-	  }
 
-	  //----// COMPUTE SUBMIT [[deprecated]] (TEXTURESHADERS)// // **waiting on nothing
-	  /*vk::Semaphore const ctexSema = {*semaphores[resource_index].computeCompleteSemaphore_[1]};
-	  {
-		vk::CommandBuffer const compute_process[4] = { nullptr, nullptr, nullptr, *computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_TEXTURE][resource_index] };
+		  //----// UPLOAD & OVERLAY // // **waiting on nothing
+		  {
+			  device.waitForFences(2, overlay_dynamic_fence, VK_TRUE, umax);				// protect 
 
-		vk::Fence const compute_fence = computeDrawBuffers_.fence[eComputeBuffers::COMPUTE_TEXTURE][resource_index];
-		if (computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_TEXTURE][resource_index]) {
-			device.waitForFences(compute_fence, VK_TRUE, umax);
-			device.resetFences(compute_fence);
-			computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_TEXTURE][resource_index] = false; // reset
-		}
+			  vk::CommandBuffer do_cb[2] = { *dynamicDrawBuffers_.cb[0][resource_index], *overlayDrawBuffers_.cb[eOverlayBuffers::TRANSFER][resource_index] };
 
-		gpu_compute(std::forward<compute_pass&& __restrict>({ compute_process[eComputeBuffers::TRANSFER], compute_process[eComputeBuffers::TRANSFER_LIGHT], compute_process[eComputeBuffers::COMPUTE_LIGHT], compute_process[eComputeBuffers::COMPUTE_TEXTURE], resource_index }));    // compute part resets the dirty state that transfer set
+			  { // ######### begin overlay transfer cb update (spawned)
+				  // staging
+				  overlay_function(std::forward<overlay_renderpass&& __restrict>({ &do_cb[1], nullptr, resource_index, std::forward<vk::RenderPassBeginInfo&& __restrict>(vk::RenderPassBeginInfo{}) }));		// submission of staged data to gpu // build transfer cb
+			  }
 
-		//vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eComputeShader };
-		vk::SubmitInfo submit{};
-		submit.waitSemaphoreCount = 0;
-		submit.pWaitSemaphores = nullptr;				// **waiting on nothing
-		submit.pWaitDstStageMask = nullptr;
-		submit.commandBufferCount = 1;
-		submit.pCommandBuffers = &compute_process[eComputeBuffers::COMPUTE_TEXTURE];				// submitting compute cb
-		submit.signalSemaphoreCount = 1;
-		submit.pSignalSemaphores = &ctexSema;			// signalling compute cb completion
+			  { // ######### begin dynamic transfer cb update (main thread)
+				  // staging
+				  dynamic_function(std::forward<dynamic_renderpass&&>({ do_cb[0], resource_index }));	// submission of staged data to gpu
+			  }
 
-		computeQueue_[!resource_index].submit(1, &submit, compute_fence); // always use "other" compute queue so they potentially can be running independently and in parallel
+			  // DYNAMIC & OVERLAY DYNAMIC SUBMIT //
+			  {
+				  vk::SubmitInfo submit{};
+				  submit.waitSemaphoreCount = 0;
+				  submit.pWaitSemaphores = nullptr;				// **waiting on nothing
+				  submit.pWaitDstStageMask = nullptr;
+				  submit.commandBufferCount = 2;				// submitting dynamic cb & overlay's dynamic cb
+				  submit.pCommandBuffers = do_cb;
+				  submit.signalSemaphoreCount = 1;
+				  submit.pSignalSemaphores = &tcSema[1];			// signal for dynamic cb in slot 0, signal for overlay dynamic cb in slot 1 (completion)
 
-		computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_TEXTURE][resource_index] = true;
-	  }*/
+				  device.resetFences(2, overlay_dynamic_fence);
+				  transferQueue_[!resource_index].submit(1, &submit, overlay_dynamic_fence[1]); // <---- this is opposite transfer queue on purpose so dma transfers are simultaneous
+			  }
+		  }
 
+		  //----// COMPUTE SUBMIT [[deprecated]] (TEXTURESHADERS)// // **waiting on nothing
+		  /*vk::Semaphore const ctexSema = {*semaphores[resource_index].computeCompleteSemaphore_[1]};
+		  {
+			vk::CommandBuffer const compute_process[4] = { nullptr, nullptr, nullptr, *computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_TEXTURE][resource_index] };
+
+			vk::Fence const compute_fence = computeDrawBuffers_.fence[eComputeBuffers::COMPUTE_TEXTURE][resource_index];
+			if (computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_TEXTURE][resource_index]) {
+				device.waitForFences(compute_fence, VK_TRUE, umax);
+				device.resetFences(compute_fence);
+				computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_TEXTURE][resource_index] = false; // reset
+			}
+
+			gpu_compute(std::forward<compute_pass&& __restrict>({ compute_process[eComputeBuffers::TRANSFER], compute_process[eComputeBuffers::TRANSFER_LIGHT], compute_process[eComputeBuffers::COMPUTE_LIGHT], compute_process[eComputeBuffers::COMPUTE_TEXTURE], resource_index }));    // compute part resets the dirty state that transfer set
+
+			//vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eComputeShader };
+			vk::SubmitInfo submit{};
+			submit.waitSemaphoreCount = 0;
+			submit.pWaitSemaphores = nullptr;				// **waiting on nothing
+			submit.pWaitDstStageMask = nullptr;
+			submit.commandBufferCount = 1;
+			submit.pCommandBuffers = &compute_process[eComputeBuffers::COMPUTE_TEXTURE];				// submitting compute cb
+			submit.signalSemaphoreCount = 1;
+			submit.pSignalSemaphores = &ctexSema;			// signalling compute cb completion
+
+			computeQueue_[!resource_index].submit(1, &submit, compute_fence); // always use "other" compute queue so they potentially can be running independently and in parallel
+
+			computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_TEXTURE][resource_index] = true;
+		  }*/
+	  } // !expect_frame_two
+	
 	  // upload & compute
 	  // 	   |
 	  // 	graphics
@@ -2568,19 +2558,24 @@ public:
 		  return(resource_index); // doesn't change resource_index on failure in normal path (frames 0 & 1)
 
 	  //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%//
-
+	  if (bAsyncCompute) { // *bugfix - required - must ensure compute has started, was submitted prior to this graphics submission
+		  async_long_task::wait<background_critical>(task_compute_light, "compute light");
+	  }
+	
 	ccSema = *commandCompleteSemaphore_[imageIndex]; // required
 
-	expect_frame_two = false; // reset
-	if (1 == imageIndex) {
-
-		expect_frame_two = true; // for next frame
-	}
-
-	if (2 == imageIndex) {
+	switch (imageIndex) {
+	case 2:
+		expect_frame_two = false; // reset
 		presentation(device, iaSema, ccSema, imageIndex);
-		return(resource_index); // resource index doesn't change for final swapchain image (frame 2)
+		return(resource_index); // resource index doesn't change for final swapchain image
+	case 1:
+		expect_frame_two = true; // for next frame
+		break;
+	default:
+		break;
 	}
+
 	// **** imageIndex can safetly be assumed not equal to 2 from this point on **** //
 		
 	vk::Semaphore const iatccSema[3] = { iaSema, tcSema[1], cSema };
@@ -2610,9 +2605,6 @@ public:
 			submit.pSignalSemaphores = &staticSema;		// signalling static cb completion
 
 			// ########### FRAMES FIRST USAGE OF GRAPHICS QUEUE ################ //
-			if (bAsyncCompute) { // *bugfix - required - must ensure compute has started, was submitted prior to this graphics submission
-				async_long_task::wait<background_critical>(task_compute_light, "compute light");
-			}
 			device.resetFences(static_fence);
 			graphicsQueue_.submit(1, &submit, static_fence);
 			iaSema = nullptr;  // unreference important
