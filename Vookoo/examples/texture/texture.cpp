@@ -11,7 +11,13 @@ int main() {
   const char *title = "texture";
   auto glfwwindow = glfwCreateWindow(800, 600, title, nullptr, nullptr);
 
-  vku::Framework fw{title};
+  // Initialize makers
+  vku::InstanceMaker im{};
+  im.defaultLayers();
+  vku::DeviceMaker dm{};
+  dm.defaultLayers();
+
+  vku::Framework fw{im, dm};
   if (!fw.ok()) {
     std::cout << "Framework creation failed" << std::endl;
     exit(1);
@@ -61,23 +67,20 @@ int main() {
   //
   // Build the pipeline
 
-  vku::PipelineMaker pm{window.width(), window.height()};
-  pm.shader(vk::ShaderStageFlagBits::eVertex, vert_);
-  pm.shader(vk::ShaderStageFlagBits::eFragment, frag_);
-  pm.vertexBinding(0, (uint32_t)sizeof(Vertex));
-  pm.vertexAttribute(0, 0, vk::Format::eR32G32Sfloat, (uint32_t)offsetof(Vertex, pos));
-  pm.vertexAttribute(1, 0, vk::Format::eR32G32B32Sfloat, (uint32_t)offsetof(Vertex, colour));
-  vku::HostVertexBuffer vbo(fw.device(), fw.memprops(), vertices);
+  auto buildPipeline = [&]() {
+    vku::PipelineMaker pm{window.width(), window.height()};
+    pm.shader(vk::ShaderStageFlagBits::eVertex, vert_);
+    pm.shader(vk::ShaderStageFlagBits::eFragment, frag_);
+    pm.vertexBinding(0, (uint32_t)sizeof(Vertex));
+    pm.vertexAttribute(0, 0, vk::Format::eR32G32Sfloat, (uint32_t)offsetof(Vertex, pos));
+    pm.vertexAttribute(1, 0, vk::Format::eR32G32B32Sfloat, (uint32_t)offsetof(Vertex, colour));
 
-  struct Uniform { glm::vec4 colour; };
-  Uniform uniform;
-  uniform.colour = glm::vec4(0, 1, 1, 1);
-  vku::UniformBuffer ubo(fw.device(), fw.memprops(), sizeof(Uniform));
-  ubo.upload(device, fw.memprops(), window.commandPool(), fw.graphicsQueue(), uniform);
+    auto renderPass = window.renderPass();
+    auto cache = fw.pipelineCache();
+    return  pm.createUnique(device, cache, *pipelineLayout, renderPass);
+  };
 
-  auto renderPass = window.renderPass();
-  auto &cache = fw.pipelineCache();
-  auto pipeline = pm.createUnique(device, cache, *pipelineLayout, renderPass);
+  auto pipeline = buildPipeline();
 
   ////////////////////////////////////////
   //
@@ -97,6 +100,13 @@ int main() {
   vku::DescriptorSetUpdater update;
   update.beginDescriptorSet(descriptorSets[0]);
 
+  struct Uniform { glm::vec4 colour; };
+  Uniform uniform;
+  uniform.colour = glm::vec4(0, 1, 1, 1);
+  vku::UniformBuffer ubo(fw.device(), fw.memprops(), sizeof(Uniform));
+  ubo.upload(device, fw.memprops(), window.commandPool(), fw.graphicsQueue(), uniform);
+  vku::HostVertexBuffer vbo(fw.device(), fw.memprops(), vertices);
+
   // Set initial uniform buffer value
   update.beginBuffers(0, 0, vk::DescriptorType::eUniformBuffer);
   update.buffer(ubo.buffer(), 0, sizeof(Uniform));
@@ -109,18 +119,25 @@ int main() {
 
   // Set the static render commands for the main renderpass.
   window.setStaticCommands(
-    [&](vk::CommandBuffer cb, int imageIndex, vk::RenderPassBeginInfo &rpbi) {
-      vk::CommandBufferBeginInfo bi{};
-      cb.begin(bi);
-      cb.beginRenderPass(rpbi, vk::SubpassContents::eInline);
-      cb.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
-      cb.bindVertexBuffers(0, vbo.buffer(), vk::DeviceSize(0));
-      cb.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineLayout, 0, descriptorSets, nullptr);
-      cb.draw(3, 1, 0, 0);
-      cb.endRenderPass();
-      cb.end();
-    }
-  );
+      [&](vk::CommandBuffer cb, int imageIndex, vk::RenderPassBeginInfo &rpbi) {
+        static auto ww = window.width();
+        static auto wh = window.height();
+        if (window.width() != ww || window.height() != wh) {
+          ww = window.width();
+          wh = window.height();
+          pipeline = buildPipeline();
+        }
+        vk::CommandBufferBeginInfo bi{};
+        cb.begin(bi);
+        cb.beginRenderPass(rpbi, vk::SubpassContents::eInline);
+        cb.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
+        cb.bindVertexBuffers(0, vbo.buffer(), vk::DeviceSize(0));
+        cb.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineLayout,
+                              0, descriptorSets, nullptr);
+        cb.draw(3, 1, 0, 0);
+        cb.endRenderPass();
+        cb.end();
+      });
 
   if (!window.ok()) {
     std::cout << "Window creation failed" << std::endl;

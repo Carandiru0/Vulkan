@@ -2,7 +2,15 @@ Vookoo 2.0
 ==========
 
 Vookoo is a set of dependency-free utilities to assist in the construction and updating of
-Vulkan graphics data structres.
+Vulkan graphics data structures.
+
+To compile example codes, use the CMakeLists.txt in the root of the distribution.
+On unix machines (Linux/Mac OS X), the following will compile the examples:
+
+    mkdir build
+    cd build
+    cmake ..
+    make
 
 Documentation:
 
@@ -23,7 +31,7 @@ in the C and C++ libraries
     pm.vertexAttribute(0, 0, vk::Format::eR32G32Sfloat, (uint32_t)offsetof(Vertex, pos));
     pm.vertexAttribute(1, 0, vk::Format::eR32G32B32Sfloat, (uint32_t)offsetof(Vertex, colour));
   
-Tetxures are easy to construct and upload:
+Textures are easy to construct and upload:
 
     // Create an image, memory and view for the texture on the GPU.
     vku::TextureImage2D texture{device, fw.memprops(), 2, 2, vk::Format::eR8G8B8A8Unorm};
@@ -62,7 +70,7 @@ Vulkan is known for immensely verbose data structures and exacting rules
 but this can be mitigated but providing classes to help the construction
 of Vulkan resources.
 
-If you want to contribute to Vookoo, please send my some pull requests.
+If you want to contribute to Vookoo, please send me some pull requests.
 I will post some work areas that could do with improvement.
 
 History
@@ -118,12 +126,13 @@ Building the examples on Windows:
     cmake -G "Visual Studio 14 2015 Win64" ..\examples
     VookooExamples.sln
 
-Building the examples on Linux:
+Building the examples on Ubuntu:
 
-    sudo apt install libxinerama-dev libxcursor-dev libxrandr-dev
+    sudo apt install libxinerama-dev libxcursor-dev libxrandr-dev glslang-dev glslang-tools mesa-common-dev
     mkdir build
     cd build
     cmake ../examples
     make
 
+Please give feedback if these setting do not work for you.
 

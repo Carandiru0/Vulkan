@@ -1,4 +1,4 @@
-
+#include <cstdlib>
 #include <vku/vku_framework.hpp>
 #include <vku/vku.hpp>
 #include <glm/glm.hpp>
@@ -10,8 +10,32 @@
 #include <gilgamesh/shapes/teapot.hpp>
 #include <gilgamesh/decoders/fbx_decoder.hpp>
 #include <gilgamesh/encoders/fbx_encoder.hpp>
+struct Vertex { glm::vec3 pos; glm::vec3 normal; glm::vec2 uv; };
 
-int main() {
+// Compilation constant values.
+bool useIntFactor = false;
+float floatFactor = 1.0;
+int intFactor = 1;
+
+void usage(char *cmd)
+{
+  std::cerr << "Usage: " << cmd << " [ -f <floatScale> | -i <intScale> ]" << std::endl;
+}
+
+int main(int argc, char *argv[]) {
+  if (argc != 1 && argc != 3)
+    usage(argv[0]);
+  if (argc == 3) {
+    if( argv[1] == std::string{"-f"} ) {
+      floatFactor = static_cast<float>(std::atof(argv[2]));
+      useIntFactor = false;
+    } else if (argv[1] == std::string{"-i"}) {
+      useIntFactor = true;
+      intFactor = std::atoi(argv[2]);
+    } else
+      usage(argv[0]);
+  }
+
   glfwInit();
 
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -20,7 +44,13 @@ int main() {
   auto glfwwindow = glfwCreateWindow(800, 600, title, nullptr, nullptr);
 
   {
-    vku::Framework fw{title};
+    // Initialize makers
+    vku::InstanceMaker im{};
+    im.defaultLayers();
+    vku::DeviceMaker dm{};
+    dm.defaultLayers();
+
+    vku::Framework fw{im, dm};
     if (!fw.ok()) {
       std::cout << "Framework creation failed" << std::endl;
       exit(1);
@@ -59,7 +89,6 @@ int main() {
     shape.build(mesh);
     mesh.reindex(true);
 
-    struct Vertex { glm::vec3 pos; glm::vec3 normal; glm::vec2 uv; };
     std::vector<Vertex> vertices;
 
     auto meshpos = mesh.pos();
@@ -123,22 +152,43 @@ int main() {
     //
     // Build the final pipeline including enabling the depth test
 
-    vku::ShaderModule final_vert{device, BINARY_DIR "teapot.vert.spv"};
-    vku::ShaderModule final_frag{device, BINARY_DIR "teapot.frag.spv"};
+		vku::ShaderModule final_vert{window.device(), BINARY_DIR "teapot.vert.spv"};
+		vku::ShaderModule final_frag{window.device(), BINARY_DIR "teapot.frag.spv"};
+                auto buildCameraPipeline = [&]() {
+                  {
 
-    vku::PipelineMaker pm{window.width(), window.height()};
-    pm.shader(vk::ShaderStageFlagBits::eVertex, final_vert);
-    pm.shader(vk::ShaderStageFlagBits::eFragment, final_frag);
-    pm.vertexBinding(0, (uint32_t)sizeof(Vertex));
-    pm.vertexAttribute(0, 0, vk::Format::eR32G32B32Sfloat, (uint32_t)offsetof(Vertex, pos));
-    pm.vertexAttribute(1, 0, vk::Format::eR32G32B32Sfloat, (uint32_t)offsetof(Vertex, normal));
-    pm.vertexAttribute(2, 0, vk::Format::eR32G32Sfloat, (uint32_t)offsetof(Vertex, uv));
-    pm.depthTestEnable(VK_TRUE);
-    pm.cullMode(vk::CullModeFlagBits::eBack);
-    pm.frontFace(vk::FrontFace::eCounterClockwise);
+                    vku::PipelineMaker pm{window.width(), window.height()};
+                    std::vector<vku::SpecConst> specList{
+                        {0, intFactor},
+                        {1, floatFactor},
+                        {3, useIntFactor}
+                    };
+                    pm.shader(vk::ShaderStageFlagBits::eVertex, final_vert,
+                              specList);
+                    //pm.shader(vk::ShaderStageFlagBits::eVertex, final_vert, {
+                    //                {0,2},
+                    //                {1, 0.5f },
+                    //                {3, false }
+                    //            });
+                    pm.shader(vk::ShaderStageFlagBits::eFragment, final_frag);
+                    pm.vertexBinding(0, (uint32_t)sizeof(Vertex));
+                    pm.vertexAttribute(0, 0, vk::Format::eR32G32B32Sfloat,
+                                       (uint32_t)offsetof(Vertex, pos));
+                    pm.vertexAttribute(1, 0, vk::Format::eR32G32B32Sfloat,
+                                       (uint32_t)offsetof(Vertex, normal));
+                    pm.vertexAttribute(2, 0, vk::Format::eR32G32Sfloat,
+                                       (uint32_t)offsetof(Vertex, uv));
+                    pm.depthTestEnable(VK_TRUE);
+                    pm.cullMode(vk::CullModeFlagBits::eBack);
+                    pm.frontFace(vk::FrontFace::eCounterClockwise);
+                    return pm;
+                  }
+                };
+
+                auto pm = buildCameraPipeline();
 
     auto renderPass = window.renderPass();
-    auto &cache = fw.pipelineCache();
+    auto cache = fw.pipelineCache();
     auto finalPipeline = pm.createUnique(device, cache, *pipelineLayout, renderPass);
 
     ////////////////////////////////////////
@@ -224,7 +274,7 @@ int main() {
     // Create a cubemap
 
     // see: https://github.com/dariomanesku/cmft
-    auto cubeBytes = vku::loadFile(SOURCE_DIR "okretnica.ktx");
+    auto cubeBytes = vku::loadFile(SOURCE_DIR "examples/okretnica.ktx");
     vku::KTXFileLayout ktx(cubeBytes.data(), cubeBytes.data()+cubeBytes.size());
     if (!ktx.ok()) {
       std::cout << "Could not load KTX file" << std::endl;
@@ -241,9 +291,9 @@ int main() {
     vku::executeImmediately(device, window.commandPool(), fw.graphicsQueue(), [&](vk::CommandBuffer cb) {
       vk::Buffer buf = stagingBuffer.buffer();
       for (uint32_t mipLevel = 0; mipLevel != ktx.mipLevels(); ++mipLevel) {
-        auto width = ktx.width(mipLevel); 
-        auto height = ktx.height(mipLevel); 
-        auto depth = ktx.depth(mipLevel); 
+        auto width = ktx.width(mipLevel);
+        auto height = ktx.height(mipLevel);
+        auto depth = ktx.depth(mipLevel);
         for (uint32_t face = 0; face != ktx.faces(); ++face) {
           cubeMap.copy(cb, buf, mipLevel, face, width, height, depth, ktx.offset(mipLevel, 0, face));
         }
@@ -304,7 +354,24 @@ int main() {
         [&](vk::CommandBuffer cb, int imageIndex, vk::RenderPassBeginInfo &rpbi) {
           Uniform uniform{};
           modelToWorld = glm::rotate(modelToWorld, glm::radians(1.0f), glm::vec3(0, 0, 1));
-          uniform.modelToPerspective = cameraToPerspective * worldToCamera * modelToWorld;
+          static auto ow = window.width();
+          static auto oh = window.height();
+          if (ow != window.width()) {
+            ow = window.width();
+            oh = window.height();
+            cameraToPerspective =
+                leftHandCorrection *
+                glm::perspective(glm::radians(45.0f),
+                                 (float)ow /
+                                     oh, // window.width() / window.height(),
+                                 1.0f, 100.0f);
+            auto pm = buildCameraPipeline();
+            renderPass = window.renderPass();
+            finalPipeline =
+                pm.createUnique(device, cache, *pipelineLayout, renderPass);
+          }
+          uniform.modelToPerspective =
+              cameraToPerspective * worldToCamera * modelToWorld;
           uniform.normalToWorld = modelToWorld;
           uniform.modelToWorld = modelToWorld;
           uniform.modelToLight = lightToPerspective * worldToLight * modelToWorld;
