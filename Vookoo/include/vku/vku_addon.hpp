@@ -156,19 +156,26 @@ namespace vku {
 		vk::CommandBuffer cb_transfer_light;
 		vk::CommandBuffer cb_render_light;
 		// [[deprecated]] vk::CommandBuffer cb_render_texture;
-		uint32_t resource_index;
+		
+		uint32_t		  resource_index;
+		uint32_t		  transferQueueFamilyIndex,
+						  computeQueueFamilyIndex;
+		
+		bool			  async_compute_enabled;
 
 	} compute_pass;
-	typedef bool const(*const compute_function)(compute_pass&& __restrict);
+	typedef void (*const compute_function)(compute_pass&& __restrict);
 
 	typedef struct {
 		vk::CommandBuffer cb;
 		uint32_t resource_index;
-
+		bool async_compute_enabled;
+		
 		vk::RenderPassBeginInfo&& __restrict rpbiZ;
 		vk::RenderPassBeginInfo&& __restrict rpbiHalf;
 		vk::RenderPassBeginInfo&& __restrict rpbiFull;
 		vk::RenderPassBeginInfo&& __restrict rpbiMid;
+		vk::RenderPassBeginInfo&& __restrict rpbiTransparency;
 		vk::RenderPassBeginInfo&& __restrict rpbiOff;
 
 	} static_renderpass;
@@ -185,9 +192,10 @@ namespace vku {
 	typedef struct {
 		vk::CommandBuffer* __restrict cb_transfer;
 		vk::CommandBuffer* __restrict cb_render;
+		
 		uint32_t resource_index;
 
-		vk::RenderPassBeginInfo&& __restrict rpbi;
+		vk::RenderPassBeginInfo&& __restrict rpbiOverlay;
 		
 	} overlay_renderpass;
 	typedef void(*const overlay_renderpass_function)(overlay_renderpass&& __restrict);

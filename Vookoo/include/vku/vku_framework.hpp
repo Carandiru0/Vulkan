@@ -242,14 +242,14 @@ public:
 
 	vk::PhysicalDeviceVulkanMemoryModelFeatures supportedMemoryModel{};
 	vk::PhysicalDevice8BitStorageFeatures supportedByteStorage{};
-
+	vk::PhysicalDeviceMaintenance4Features supportedMaintenance4{};
 	vk::PhysicalDeviceFeatures2 supportedFeatures{};
 
 	// ################ start of pNext linked list chain for query
-	supportedByteStorage.pNext = nullptr;
+	supportedMaintenance4.pNext = nullptr;
+	supportedByteStorage.pNext = &supportedMaintenance4;
 	supportedMemoryModel.pNext = &supportedByteStorage;
 	supportedFeatures.pNext = &supportedMemoryModel;  // ####### pNext chain ###### for query support of extensions //
-
 
 	physical_device_.getFeatures2(&supportedFeatures);
 
@@ -268,6 +268,7 @@ public:
 
 	PRINT_FEATURE(supportedMemoryModel.vulkanMemoryModel, "vulkan memory model"); if (!supportedMemoryModel.vulkanMemoryModel) return;
 	PRINT_FEATURE(supportedByteStorage.storageBuffer8BitAccess, "storage buffer 8bit"); if (!supportedByteStorage.storageBuffer8BitAccess) return;
+	PRINT_FEATURE(supportedMaintenance4.maintenance4, "maintenance 4"); if (!supportedMaintenance4.maintenance4) return;
 	PRINT_FEATURE(enabledFeatures.geometryShader, "geometry shader"); if (!enabledFeatures.geometryShader) return;
 	PRINT_FEATURE(enabledFeatures.sampleRateShading, "sample shading"); if (!enabledFeatures.sampleRateShading) return;
 	PRINT_FEATURE(enabledFeatures.depthClamp, "depth clamping"); if (!enabledFeatures.depthClamp) return;
@@ -359,17 +360,22 @@ public:
 	};
 	computeFullgroups.pNext = nullptr;
 	
+	vk::PhysicalDeviceMaintenance4Features maintenance{
+		VK_TRUE,										// - required (supportedMaintenance4.maintenance4) //
+	};
+	if (fullsubgroups) {
+		maintenance.pNext = &computeFullgroups;
+	}
+	else {
+		maintenance.pNext = nullptr;
+	}
+	
 	vk::PhysicalDevice8BitStorageFeatures byteStorage{
 		VK_TRUE,												 // - required (supportedByteStorage.storageBuffer8BitAccess) //
 		supportedByteStorage.uniformAndStorageBuffer8BitAccess,  // - optional //
 		supportedByteStorage.storagePushConstant8				 // - optional //
 	};
-	if (fullsubgroups) {
-		byteStorage.pNext = &computeFullgroups;
-	}
-	else {
-		byteStorage.pNext = nullptr;
-	}
+	byteStorage.pNext = &maintenance;
 
 	vk::PhysicalDeviceVulkanMemoryModelFeatures memoryModel{
 		VK_TRUE,																 // - required (supportedMemoryModel.vulkanMemoryModel) //
@@ -525,7 +531,7 @@ private:
 
 								           
 BETTER_ENUM(eCommandPools, uint32_t const, DEFAULT_POOL = 0, OVERLAY_POOL, TRANSIENT_POOL, DMA_TRANSFER_POOL_PRIMARY, DMA_TRANSFER_POOL_SECONDARY, COMPUTE_POOL_PRIMARY, COMPUTE_POOL_SECONDARY);
-BETTER_ENUM(eFrameBuffers, uint32_t const, DEPTH, HALF_COLOR_ONLY, FULL_COLOR_ONLY, MID_COLOR_DEPTH, COLOR_DEPTH, POSTAA_0, POSTAA_1, POSTAA_2, PRESENT, CLEAR, OFFSCREEN);
+BETTER_ENUM(eFrameBuffers, uint32_t const, DEPTH, HALF_COLOR_ONLY, FULL_COLOR_ONLY, MID_COLOR_DEPTH, COLOR_DEPTH, OVERLAY, POSTAA_0, POSTAA_1, POSTAA_2, PRESENT, CLEAR, OFFSCREEN);
 BETTER_ENUM(eOverlayBuffers, uint32_t const, TRANSFER, RENDER);
 BETTER_ENUM(eComputeBuffers, uint32_t const, TRANSFER, TRANSFER_LIGHT, COMPUTE_LIGHT);
 
@@ -991,8 +997,8 @@ public:
 		  vk::AccessFlagBits::eDepthStencilAttachmentWrite |
 		  vk::AccessFlagBits::eTransferRead |
 		  vk::AccessFlagBits::eTransferWrite |
-		  vk::AccessFlagBits::eHostRead |
-		  vk::AccessFlagBits::eHostWrite |
+		  /*vk::AccessFlagBits::eHostRead |
+		  vk::AccessFlagBits::eHostWrite |*/
 		  vk::AccessFlagBits::eMemoryRead |
 		  vk::AccessFlagBits::eMemoryWrite;
 	
@@ -1010,6 +1016,7 @@ public:
 		
 		  vku::memory_barrier(cb, (vk::PipelineStageFlagBits)getSrcStageMask(), (vk::PipelineStageFlagBits)getDstStageMask(), (vk::AccessFlagBits)getSrcAccessMask(), (vk::AccessFlagBits)getDstAccessMask());
 	  }
+	
   private:
 	  // for subpass dependencies
 	  void debug_barrier(vku::RenderpassMaker& rpm, uint32_t const srcSubpass, uint32_t const dstSubpass) const
@@ -1054,6 +1061,8 @@ public:
 	  // neccessary to cache for hot swapchain recreation
 	  physicalDevice_ = physicalDevice;
 	  graphicsQueueFamilyIndex_ = graphicsQueueFamilyIndex;
+	  computeQueueFamilyIndex_ = computeQueueFamilyIndex;
+	  transferQueueFamilyIndex_ = transferQueueFamilyIndex;
 	  monitor_ = monitor;
 
 	  { // major bugfix: graphics queue is now ALWAYS the presenting queue. It has the lowest latency for present, allows overlap of dma transfers queues used
@@ -1097,11 +1106,17 @@ public:
 		  auto const& __restrict transientCommandPool = *commandPool_[eCommandPools::TRANSIENT_POOL];
 		  
 		  colorImage_ = vku::ColorAttachmentImage(device, width_, height_, vku::DefaultSampleCount, transientCommandPool, graphicsQueue_, false, false, false, vk::Format::eB8G8R8A8Unorm);	// not sampled, not inputattachment, not copyable
-		  lastColorImage_ = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, false, false, vk::Format::eB8G8R8A8Unorm);	// is sampled, not inputattachment, not copyable
-		  depthImage_ = vku::DepthAttachmentImage(device, width_, height_, vku::DefaultSampleCount, transientCommandPool, graphicsQueue_, false, true);  // is inputattachment
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)colorImage_.image(), vkNames::Image::colorImage);
-		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)lastColorImage_.image(), vkNames::Image::lastColorImage);
+		  
+		  depthImage_ = vku::DepthAttachmentImage(device, width_, height_, vku::DefaultSampleCount, transientCommandPool, graphicsQueue_, false, true);  // is inputattachment
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)depthImage_.image(), vkNames::Image::depthImage);
+
+		  for (uint32_t i = 0; i < 2; ++i) {
+			  lastColorImage_[i] = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, false, false, vk::Format::eB8G8R8A8Unorm);	// is sampled, not inputattachment, not copyable
+			  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)lastColorImage_[i].image(), vkNames::Image::lastColorImage);
+		  }
+		  lastColorImage_[2] = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, true, false, vk::Format::eB8G8R8A8Unorm);	// not sampled, is inputattachment, not copyable
+		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)lastColorImage_[2].image(), vkNames::Image::lastColorImage);
 
 		  mouseImage_.multisampled = vku::ColorAttachmentImage(device, width_, height_, vku::DefaultSampleCount, transientCommandPool, graphicsQueue_, false, false, false, vk::Format::eR16G16Unorm);	// not sampled, not inputattachment, not copyable
 		  mouseImage_.resolved = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, false, false, true, vk::Format::eR16G16Unorm);	// not sampled, not inputattachment, copyable
@@ -1153,6 +1168,9 @@ public:
 		  colorDummy_ = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, false, false, false, vk::Format::eB8G8R8A8Unorm);	// not sampled, not inputattachment, not copyable
 		
 		  vku::executeImmediately(device, transientCommandPool, graphicsQueue_, [&](vk::CommandBuffer cb) {
+
+			  // initial requirement //
+			  lastColorImage(2).setLayout(cb, vk::ImageLayout::eShaderReadOnlyOptimal);
 
 			  // never changes layout setup : //
 			  colorVolumetricDownResCheckeredImage().setLayout(cb, vk::ImageLayout::eGeneral);
@@ -1300,7 +1318,7 @@ public:
 		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eFragmentShader);
 		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
 		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eInputAttachmentRead);
-		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentRead);
+		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentRead); // remains in read-only state for remainder of frame, all opaque depth writes completed. depth testing is ok, no depth writes after this. The attachment must not be transitioned to any other state then what this final transition has. 
 		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
 
 		  // mouse resolve
@@ -1539,7 +1557,7 @@ public:
 		  rpm.attachmentBegin(depthImage_.format());								// 1
 		  rpm.attachmentSamples(vku::DefaultSampleCount);
 		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eLoad);
-		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eDontCare); // used readonly
+		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eStore); // *bugfix - still required for one more renderpass. *major bug* this is the weird white tile artifact cause
 		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
 		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
 		  rpm.attachmentInitialLayout(vk::ImageLayout::eDepthStencilReadOnlyOptimal);
@@ -1576,7 +1594,7 @@ public:
 		  rpm.attachmentFinalLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
 
 		  // The resolved colour attachment.			// resolve for voxel transparency		// 4
-		  rpm.attachmentBegin(lastColorImage_.format()); // output color attachment
+		  rpm.attachmentBegin(lastColorImage_[0].format()); // output color attachment - contains render of only opaques, used by transparency as "grab pass"
 		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);
 		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eDontCare);
 		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eStore);	// requires store of resolved attachment, used later on in different renderpass
@@ -1591,15 +1609,13 @@ public:
 		  rpm.subpassInputAttachment(vk::ImageLayout::eShaderReadOnlyOptimal, 3);
 		  rpm.subpassResolveAttachment(vk::ImageLayout::eColorAttachmentOptimal, 4);
 
-
 		  rpm.dependencyBegin(VK_SUBPASS_EXTERNAL, 0); // In
 		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eFragmentShader);
 		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eTopOfPipe | vk::PipelineStageFlagBits::eColorAttachmentOutput);
 		  rpm.dependencySrcAccessMask((vk::AccessFlagBits)0);
 		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eColorAttachmentRead);
 		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
-		
-		  /*
+		  
 		  rpm.dependencyBegin(VK_SUBPASS_EXTERNAL, 0); // In
 		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
 		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
@@ -1613,15 +1629,14 @@ public:
 		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
 		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eInputAttachmentRead);
 		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
-
+		  
 		  rpm.dependencyBegin(VK_SUBPASS_EXTERNAL, 0);
 		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
 		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
 		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentRead);
 		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentRead);
 		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
-		  */
-		
+
 		  rpm.dependencyBegin(0, 1);  // upsample blend dependent color output finished ,,,
 		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
 		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
@@ -1649,7 +1664,7 @@ public:
 												// subpass 0
 												 colorImage_.imageView(), depthImage_.imageView(), colorReflectionImage_.upsampled.imageView(),
 												// subpass 1
-												 colorVolumetricImage_.upsampled.imageView(), lastColorImage_.imageView()
+												 colorVolumetricImage_.upsampled.imageView(), lastColorImage_[0].imageView() // here the last color image is a capture of everything rendered that is opaque, a "grab pass" for usage in refraction and transparency. (Resolved from current multisampled color output)
 											   };
 		  vk::FramebufferCreateInfo const fbci{ {}, *midPass_, _countof(attachments), attachments, width_, height_, 1 };
 		  framebuffers_[eFrameBuffers::MID_COLOR_DEPTH][i] = std::move(device.createFramebufferUnique(fbci).value);
@@ -1657,9 +1672,7 @@ public:
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eFramebuffer, (VkFramebuffer)*framebuffers_[eFrameBuffers::MID_COLOR_DEPTH][i], vkNames::FrameBuffer::MID_COLOR_DEPTH);
 	  }
 
-
-
-	  // Build the renderpass (overlay / transparency pass)
+	  // Build the renderpass (transparency pass)
 	  {
 		  vku::RenderpassMaker rpm;
 
@@ -1675,8 +1688,18 @@ public:
 		  rpm.attachmentInitialLayout(vk::ImageLayout::eColorAttachmentOptimal);
 		  rpm.attachmentFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);
 
+		  // The depth/stencil attachment.
+		  rpm.attachmentBegin(depthImage_.format());
+		  rpm.attachmentSamples(vku::DefaultSampleCount);					// 1
+		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eLoad);
+		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eDontCare);  // depth not required after this renderpass
+		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
+		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
+		  rpm.attachmentInitialLayout(vk::ImageLayout::eDepthStencilReadOnlyOptimal);
+		  rpm.attachmentFinalLayout(vk::ImageLayout::eDepthStencilReadOnlyOptimal);
+
 		  // The input attachment. (reflection)
-		  rpm.attachmentBegin(colorReflectionImage_.upsampled.format());							// 1
+		  rpm.attachmentBegin(colorReflectionImage_.upsampled.format());							// 2
 		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);
 		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eLoad);
 		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eDontCare);
@@ -1685,61 +1708,23 @@ public:
 		  rpm.attachmentInitialLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
 		  rpm.attachmentFinalLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
 
-		  // The depth/stencil attachment.
-		  rpm.attachmentBegin(depthImage_.format());
-		  rpm.attachmentSamples(vku::DefaultSampleCount);					// 2
-		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eLoad);
-		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eDontCare);
-		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
-		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
-		  rpm.attachmentInitialLayout(vk::ImageLayout::eDepthStencilReadOnlyOptimal);
-		  rpm.attachmentFinalLayout(vk::ImageLayout::eDepthStencilReadOnlyOptimal);
-
-		  // The resolved colour attachment.			// resolve for everything else that needs final color buffer w/o Post Postprocessing & GUI
-		  rpm.attachmentBegin(lastColorImage_.format()); // output color attachment
+		  // The resolved colour attachment.			// resolve for everything else that needs final color buffer w/o Post Postprocessing & GUI (contains (after resolve) both opaques & transparents along with volumetrics - final render before post processing) - (contains (prior to resolve) only opaques and volumetrics)
+		  rpm.attachmentBegin(lastColorImage_[1].format()); // output color attachment
 		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);				// 3
 		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eDontCare);
 		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eStore);				// is sampled by next renderpass in post processing
 		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
 		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
-		  rpm.attachmentInitialLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+		  rpm.attachmentInitialLayout(vk::ImageLayout::eUndefined);
 		  rpm.attachmentFinalLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
-		
+
 		  // A subpass to render using the above attachment.
 		  rpm.subpassBegin(vk::PipelineBindPoint::eGraphics);
 		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 0);
-		  rpm.subpassInputAttachment(vk::ImageLayout::eShaderReadOnlyOptimal, 1);
-		  rpm.subpassDepthStencilAttachment(vk::ImageLayout::eDepthStencilReadOnlyOptimal, 2);
+		  rpm.subpassDepthStencilAttachment(vk::ImageLayout::eDepthStencilReadOnlyOptimal, 1);
+		  rpm.subpassInputAttachment(vk::ImageLayout::eShaderReadOnlyOptimal, 2);
 		  rpm.subpassResolveAttachment(vk::ImageLayout::eColorAttachmentOptimal, 3);
-				
-		  // *** 2nd SUBPASS - Nuklear GUI
-		  // The colour attachment.
-		  rpm.attachmentBegin(guiImage_.multisampled.format());
-		  rpm.attachmentSamples(vku::DefaultSampleCount);
-		  // must clear
-		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eClear);			// 4
-		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eDontCare);
-		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
-		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
-		  rpm.attachmentInitialLayout(vk::ImageLayout::eUndefined);
-		  rpm.attachmentFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);
 
-		  // The resolved colour attachment.			// resolve for GUI
-		  rpm.attachmentBegin(guiImage_.resolved.format());
-		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);				// 5
-		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eDontCare);
-		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eStore);
-		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
-		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
-		  rpm.attachmentInitialLayout(vk::ImageLayout::eUndefined);
-		  rpm.attachmentFinalLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
-
-		  // A subpass to render using the above attachment.
-		  rpm.subpassBegin(vk::PipelineBindPoint::eGraphics);
-		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 4);
-		  rpm.subpassResolveAttachment(vk::ImageLayout::eColorAttachmentOptimal, 5);
-
-		  // 2 dependency to reset the layout of attachment.
 		  rpm.dependencyBegin(VK_SUBPASS_EXTERNAL, 0); // In
 		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
 		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
@@ -1753,17 +1738,71 @@ public:
 		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentRead);
 		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentRead);
 		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
+		
+		  rpm.dependencyBegin(0, VK_SUBPASS_EXTERNAL); // Out
+		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eFragmentShader);
+		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
+		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eShaderRead);
+		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
 
-		  // reflection already in correct state (previous midpass), no dependency needed already input attachment - shaderreadonly
+		  // Use the maker object to construct the vulkan object
+		  transPass_ = rpm.createUnique(device);
 
-		  rpm.dependencyBegin(0, 1); // subpass -> subpass
+		  VKU_SET_OBJECT_NAME(vk::ObjectType::eRenderPass, (VkRenderPass)*transPass_, vkNames::Renderpass::OVERLAY);
+	  }
+
+	  framebuffers_[eFrameBuffers::COLOR_DEPTH] = new vk::UniqueFramebuffer[double_buffer_count];
+	  for (int i = 0; i != double_buffer_count; ++i) {
+		  // 1st subpass																                                      
+		  vk::ImageView attachments[4] = { colorImage_.imageView(), depthImage_.imageView(), colorReflectionImage_.upsampled.imageView(), lastColorImage_[1].imageView(), // here last color image is representing the capture of opaques & transparents with raymarch volumetrics included. basically final frame before post processing & gui. (resolved from current multisampled color output)
+									     };
+
+		  vk::FramebufferCreateInfo fbci{ {}, *transPass_, _countof(attachments), attachments, width_, height_, 1 };
+		  framebuffers_[eFrameBuffers::COLOR_DEPTH][i] = std::move(device.createFramebufferUnique(fbci).value);
+
+		  VKU_SET_OBJECT_NAME(vk::ObjectType::eFramebuffer, (VkFramebuffer)*framebuffers_[eFrameBuffers::COLOR_DEPTH][i], vkNames::FrameBuffer::COLOR_DEPTH);
+	  }
+
+	  // Build the renderpass (overlay pass)
+	  {
+		  vku::RenderpassMaker rpm;
+	
+		  // *** 1st SUBPASS - Nuklear GUI
+		  // The colour attachment.
+		  rpm.attachmentBegin(guiImage_.multisampled.format());
+		  rpm.attachmentSamples(vku::DefaultSampleCount);
+		  // must clear
+		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eClear);			// 0
+		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eDontCare);
+		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
+		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
+		  rpm.attachmentInitialLayout(vk::ImageLayout::eUndefined);
+		  rpm.attachmentFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);
+
+		  // The resolved colour attachment.			// resolve for GUI
+		  rpm.attachmentBegin(guiImage_.resolved.format());
+		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);				// 1
+		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eDontCare);
+		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eStore);
+		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
+		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
+		  rpm.attachmentInitialLayout(vk::ImageLayout::eUndefined);
+		  rpm.attachmentFinalLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+
+		  // A subpass to render using the above attachment.
+		  rpm.subpassBegin(vk::PipelineBindPoint::eGraphics);
+		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 0);
+		  rpm.subpassResolveAttachment(vk::ImageLayout::eColorAttachmentOptimal, 1);
+		
+		  rpm.dependencyBegin(VK_SUBPASS_EXTERNAL, 0); // In
 		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
 		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
 		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
 		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
 		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
 		  
-		  rpm.dependencyBegin(1, VK_SUBPASS_EXTERNAL); // Out
+		  rpm.dependencyBegin(0, VK_SUBPASS_EXTERNAL); // Out
 		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
 		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eFragmentShader);
 		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
@@ -1776,18 +1815,15 @@ public:
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eRenderPass, (VkRenderPass)*overlayPass_, vkNames::Renderpass::OVERLAY);
 	  }
 
-	  framebuffers_[eFrameBuffers::COLOR_DEPTH] = new vk::UniqueFramebuffer[double_buffer_count];
+	  framebuffers_[eFrameBuffers::OVERLAY] = new vk::UniqueFramebuffer[double_buffer_count];
 	  for (int i = 0; i != double_buffer_count; ++i) {
 											// 1st subpass																                                      
-		  vk::ImageView attachments[6] = { colorImage_.imageView(), colorReflectionImage_.upsampled.imageView(), depthImage_.imageView(), 
-											// 2nd subpass 		
-											lastColorImage_.imageView(),
-										    guiImage_.multisampled.imageView()/*cleared*/, guiImage_.resolved.imageView() };
+		  vk::ImageView attachments[2] = { guiImage_.multisampled.imageView()/*cleared*/, guiImage_.resolved.imageView() };
 
 		  vk::FramebufferCreateInfo fbci{ {}, *overlayPass_, _countof(attachments), attachments, width_, height_, 1 };
-		  framebuffers_[eFrameBuffers::COLOR_DEPTH][i] = std::move(device.createFramebufferUnique(fbci).value);
+		  framebuffers_[eFrameBuffers::OVERLAY][i] = std::move(device.createFramebufferUnique(fbci).value);
 
-		  VKU_SET_OBJECT_NAME(vk::ObjectType::eFramebuffer, (VkFramebuffer)*framebuffers_[eFrameBuffers::COLOR_DEPTH][i], vkNames::FrameBuffer::COLOR_DEPTH);
+		  VKU_SET_OBJECT_NAME(vk::ObjectType::eFramebuffer, (VkFramebuffer)*framebuffers_[eFrameBuffers::OVERLAY][i], vkNames::FrameBuffer::OVERLAY);
 	  }
 	
 	  // Post AA 
@@ -1796,7 +1832,7 @@ public:
 	  { 
 		  vku::RenderpassMaker rpm;
 
-		  // The colour attachment. (resolved)
+		  // The colour attachment.
 		  rpm.attachmentBegin(colorDummy_.format());
 		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);					 // 0
 
@@ -1807,9 +1843,21 @@ public:
 		  rpm.attachmentInitialLayout(vk::ImageLayout::eColorAttachmentOptimal);
 		  rpm.attachmentFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);
 
+		  // The input attachment. (gui)
+		  rpm.attachmentBegin(lastColorImage_[2].format());
+		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);					// 1
+
+		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eLoad);
+		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eDontCare);
+		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
+		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
+		  rpm.attachmentInitialLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+		  rpm.attachmentFinalLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+
 		  // A subpass to render using the above attachment.
 		  rpm.subpassBegin(vk::PipelineBindPoint::eGraphics);
 		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 0);
+		  rpm.subpassInputAttachment(vk::ImageLayout::eShaderReadOnlyOptimal, 1);
 
 		  rpm.dependencyBegin(VK_SUBPASS_EXTERNAL, 0);
 		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
@@ -1822,13 +1870,13 @@ public:
 		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eFragmentShader);
 		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eFragmentShader);
 		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eShaderWrite);
-		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eShaderRead);
+		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eShaderWrite | vk::AccessFlagBits::eShaderRead);
 		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
 
 		  rpm.dependencyBegin(0, VK_SUBPASS_EXTERNAL);
 		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eFragmentShader);
 		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eFragmentShader);
-		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eShaderWrite);
+		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eShaderWrite | vk::AccessFlagBits::eShaderRead);
 		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eShaderRead);
 		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
 
@@ -1842,7 +1890,7 @@ public:
 	  framebuffers_[eFrameBuffers::POSTAA_0] = new vk::UniqueFramebuffer[max_image_count];
 	  for (int i = 0; i != max_image_count; ++i) {
 
-		  vk::ImageView const attachments[1] = { colorDummy_.imageView()};
+		  vk::ImageView const attachments[2] = { colorDummy_.imageView(), lastColorImage_[2].imageView() };
 		  vk::FramebufferCreateInfo const fbci{ {}, *postAAPass_[0], _countof(attachments), attachments, width_, height_, 1 };
 		  framebuffers_[eFrameBuffers::POSTAA_0][i] = std::move(device.createFramebufferUnique(fbci).value);
 
@@ -1852,7 +1900,7 @@ public:
 	  framebuffers_[eFrameBuffers::POSTAA_1] = new vk::UniqueFramebuffer[max_image_count];
 	  for (int i = 0; i != max_image_count; ++i) {
 
-		  vk::ImageView const attachments[1] = { colorDummy_.imageView() };
+		  vk::ImageView const attachments[2] = { colorDummy_.imageView(), lastColorImage_[2].imageView() };
 		  vk::FramebufferCreateInfo const fbci{ {}, *postAAPass_[1], _countof(attachments), attachments, width_, height_, 1 };
 		  framebuffers_[eFrameBuffers::POSTAA_1][i] = std::move(device.createFramebufferUnique(fbci).value);
 
@@ -1862,7 +1910,7 @@ public:
 	  framebuffers_[eFrameBuffers::POSTAA_2] = new vk::UniqueFramebuffer[max_image_count];
 	  for (int i = 0; i != max_image_count; ++i) {
 
-		  vk::ImageView const attachments[1] = { colorDummy_.imageView() };
+		  vk::ImageView const attachments[2] = { colorDummy_.imageView(), lastColorImage_[2].imageView() };
 		  vk::FramebufferCreateInfo const fbci{ {}, *postAAPass_[2], _countof(attachments), attachments, width_, height_, 1 };
 		  framebuffers_[eFrameBuffers::POSTAA_2][i] = std::move(device.createFramebufferUnique(fbci).value);
 
@@ -1873,7 +1921,7 @@ public:
 	  {
 		  vku::RenderpassMaker rpm;
 
-		  // The colour attachment. /*cleared*/
+		  // The colour attachment.
 		  rpm.attachmentBegin(swapchainImageFormat_);
 		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);					 // 0
 
@@ -1884,9 +1932,20 @@ public:
 		  rpm.attachmentInitialLayout(vk::ImageLayout::eUndefined);
 		  rpm.attachmentFinalLayout(vk::ImageLayout::ePresentSrcKHR);
 
+		  // The 2nd colour attachment.
+		  rpm.attachmentBegin(lastColorImage_[2].format());
+		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);					 // 1
+
+		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eDontCare);
+		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eStore);
+		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
+		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
+		  rpm.attachmentInitialLayout(vk::ImageLayout::eUndefined);
+		  rpm.attachmentFinalLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+
 		  // The input attachment. (gui)
 		  rpm.attachmentBegin(guiImage_.resolved.format());
-		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);					// 1
+		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);					// 2
 
 		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eLoad);
 		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eDontCare);
@@ -1898,7 +1957,8 @@ public:
 		  // A subpass to render using the above attachment.
 		  rpm.subpassBegin(vk::PipelineBindPoint::eGraphics);
 		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 0);
-		  rpm.subpassInputAttachment(vk::ImageLayout::eShaderReadOnlyOptimal, 1);		  
+		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 1);
+		  rpm.subpassInputAttachment(vk::ImageLayout::eShaderReadOnlyOptimal, 2);		  
 		  /*
 		  rpm.dependencyBegin(VK_SUBPASS_EXTERNAL, 0);
 		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
@@ -1918,7 +1978,7 @@ public:
 		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eFragmentShader);
 		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eFragmentShader);
 		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eShaderWrite);
-		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eShaderRead);
+		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eShaderWrite | vk::AccessFlagBits::eShaderRead);
 		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
 		
 		  rpm.dependencyBegin(VK_SUBPASS_EXTERNAL, 0);
@@ -1927,7 +1987,7 @@ public:
 		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
 		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eInputAttachmentRead);
 		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
-	  
+
 		  /* Chapter 32 of Vulkan Spec
 		  When transitioning the image to VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR or VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, there is no need to delay subsequent processing, or perform any visibility operations (as vkQueuePresentKHR performs automatic visibility operations). To achieve this, the dstAccessMask member of the VkImageMemoryBarrier should be set to 0, and the dstStageMask parameter should be set to VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT.
 		  */
@@ -1939,6 +1999,13 @@ public:
 		  rpm.dependencyDstAccessMask((vk::AccessFlagBits)0); // *bugfix - working ok no delay to present (fastest)
 		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
 
+		  rpm.dependencyBegin(0, VK_SUBPASS_EXTERNAL); // 2nd color attachment output
+		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eFragmentShader);
+		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
+		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eInputAttachmentRead);
+		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
+		  
 		  // Use the maker object to construct the vulkan object
 		  finalPass_ = rpm.createUnique(device);
 
@@ -1948,7 +2015,7 @@ public:
 	  framebuffers_[eFrameBuffers::PRESENT] = new vk::UniqueFramebuffer[max_image_count];
 	  for (int i = 0; i != max_image_count; ++i) {
 		
-		  vk::ImageView const attachments[2] = { imageViews_[i], guiImage_.resolved.imageView() };
+		  vk::ImageView const attachments[3] = { imageViews_[i], lastColorImage_[2].imageView(), guiImage_.resolved.imageView() }; // first subpass: last Post AA stage - here the *A DIFFERENT* last color image is not an attachment, uses shader writes (stores) instead in last stage of the post processing stack. it represents the final render that can be used by Temporal AA as a suitable previous frame reference (no dithering, etc). It ia left alone and is not related to the last color image used in previous renderpasses. Those are for transparency.
 		  vk::FramebufferCreateInfo const fbci{ {}, *finalPass_, _countof(attachments), attachments, width_, height_, 1 };
 		  framebuffers_[eFrameBuffers::PRESENT][i] = std::move(device.createFramebufferUnique(fbci).value);
 
@@ -2143,15 +2210,16 @@ public:
 			  VKU_SET_OBJECT_NAME(vk::ObjectType::eCommandBuffer, (VkCommandBuffer)*clearDrawBuffers_.cb[0][resource_index], vkNames::CommandBuffer::CLEAR);
 		  }
 	  }
+	
 	  { // overlay render
-		  uint32_t const resource_count((uint32_t)double_buffer_count);
+		  uint32_t const resource_count((uint32_t)max_image_count);
 		  vk::CommandBufferAllocateInfo cbai{ *commandPool_[eCommandPools::OVERLAY_POOL], vk::CommandBufferLevel::ePrimary, resource_count };
 		  overlayDrawBuffers_.allocate<eOverlayBuffers::RENDER>(device, cbai);
 		  for (uint32_t resource_index = 0; resource_index < resource_count; ++resource_index) {
 			  VKU_SET_OBJECT_NAME(vk::ObjectType::eCommandBuffer, (VkCommandBuffer)*overlayDrawBuffers_.cb[eOverlayBuffers::RENDER][resource_index], vkNames::CommandBuffer::OVERLAY_RENDER);
 		  }
 	  }
-
+	
 	  {
 		  { // dynamic
 			  uint32_t const resource_count((uint32_t)double_buffer_count);
@@ -2238,7 +2306,7 @@ public:
   constinit static inline static_renderpass_function_unconst staticCommandCache{};
 
   /// Build a static draw buffer. This will be rendered after any dynamic content generated in draw()
-  void setStaticCommands(static_renderpass_function static_function, int32_t const iImageIndex = -1) {
+  void setStaticCommands(static_renderpass_function static_function, bool const async_compute_enabled, int32_t const iImageIndex = -1) {
 
 	  // alpha channel ust atleast be cleared to 1 for transparency "clear masks"
 	  // it is faster to clear all channels to 1 or 0
@@ -2248,7 +2316,7 @@ public:
 	  point2D const frameBufferSz(width_, height_);
 	  point2D_t const downResFrameBufferSz(vku::getDownResolution(frameBufferSz));
 
-	  vk::RenderPassBeginInfo rpbi[5];
+	  vk::RenderPassBeginInfo rpbi[6];
 
 	  rpbi[eFrameBuffers::DEPTH].renderPass = *zPass_;
 	  rpbi[eFrameBuffers::DEPTH].renderArea = vk::Rect2D{ {0, 0}, {width_, height_} };
@@ -2270,7 +2338,12 @@ public:
 	  rpbi[eFrameBuffers::MID_COLOR_DEPTH].clearValueCount = 0;
 	  rpbi[eFrameBuffers::MID_COLOR_DEPTH].pClearValues = nullptr;
 
-	  static constexpr uint32_t const OFFSCREEN_OFFSET(eFrameBuffers::OFFSCREEN - 6);
+	  rpbi[eFrameBuffers::COLOR_DEPTH].renderPass = *transPass_;
+	  rpbi[eFrameBuffers::COLOR_DEPTH].renderArea = vk::Rect2D{ {0, 0}, {width_, height_} };
+	  rpbi[eFrameBuffers::COLOR_DEPTH].clearValueCount = 0;
+	  rpbi[eFrameBuffers::COLOR_DEPTH].pClearValues = nullptr;
+	
+	  static constexpr uint32_t const OFFSCREEN_OFFSET(_countof(rpbi) - 1);
 	  rpbi[OFFSCREEN_OFFSET].renderPass = *offscreenPass_;
 	  rpbi[OFFSCREEN_OFFSET].renderArea = vk::Rect2D{ {0, 0}, {width_, height_} };
 	  rpbi[OFFSCREEN_OFFSET].clearValueCount = 1;
@@ -2283,13 +2356,15 @@ public:
 			  rpbi[eFrameBuffers::HALF_COLOR_ONLY].framebuffer  = *framebuffers_[eFrameBuffers::HALF_COLOR_ONLY][image_index];
 			  rpbi[eFrameBuffers::FULL_COLOR_ONLY].framebuffer  = *framebuffers_[eFrameBuffers::FULL_COLOR_ONLY][image_index];
 			  rpbi[eFrameBuffers::MID_COLOR_DEPTH].framebuffer  = *framebuffers_[eFrameBuffers::MID_COLOR_DEPTH][image_index];
+			  rpbi[eFrameBuffers::COLOR_DEPTH].framebuffer      = *framebuffers_[eFrameBuffers::COLOR_DEPTH][image_index];
 			  rpbi[OFFSCREEN_OFFSET].framebuffer				= *framebuffers_[eFrameBuffers::OFFSCREEN][image_index];
 
-			  static_function(std::forward<static_renderpass&& __restrict>({ cb, image_index,
+			  static_function(std::forward<static_renderpass&& __restrict>({ cb, image_index, async_compute_enabled,
 				  std::move(rpbi[eFrameBuffers::DEPTH]), 
 				  std::move(rpbi[eFrameBuffers::HALF_COLOR_ONLY]), 
 				  std::move(rpbi[eFrameBuffers::FULL_COLOR_ONLY]), 
 				  std::move(rpbi[eFrameBuffers::MID_COLOR_DEPTH]), 
+				  std::move(rpbi[eFrameBuffers::COLOR_DEPTH]),
 				  std::move(rpbi[OFFSCREEN_OFFSET]) }));
 
 			  staticCommandsDirty_[image_index] = false;
@@ -2303,13 +2378,15 @@ public:
 		  rpbi[eFrameBuffers::HALF_COLOR_ONLY].framebuffer  = *framebuffers_[eFrameBuffers::HALF_COLOR_ONLY][iImageIndex];
 		  rpbi[eFrameBuffers::FULL_COLOR_ONLY].framebuffer  = *framebuffers_[eFrameBuffers::FULL_COLOR_ONLY][iImageIndex];
 		  rpbi[eFrameBuffers::MID_COLOR_DEPTH].framebuffer  = *framebuffers_[eFrameBuffers::MID_COLOR_DEPTH][iImageIndex];
+		  rpbi[eFrameBuffers::COLOR_DEPTH].framebuffer      = *framebuffers_[eFrameBuffers::COLOR_DEPTH][iImageIndex];
 		  rpbi[OFFSCREEN_OFFSET].framebuffer				= *framebuffers_[eFrameBuffers::OFFSCREEN][iImageIndex];
 
-		  static_function(std::forward<static_renderpass&& __restrict>({ cb, (uint32_t const)iImageIndex,
+		  static_function(std::forward<static_renderpass&& __restrict>({ cb, (uint32_t const)iImageIndex, async_compute_enabled,
 			  std::move(rpbi[eFrameBuffers::DEPTH]), 
 			  std::move(rpbi[eFrameBuffers::HALF_COLOR_ONLY]), 
 			  std::move(rpbi[eFrameBuffers::FULL_COLOR_ONLY]), 
-			  std::move(rpbi[eFrameBuffers::MID_COLOR_DEPTH]), 
+			  std::move(rpbi[eFrameBuffers::MID_COLOR_DEPTH]),
+			  std::move(rpbi[eFrameBuffers::COLOR_DEPTH]),
 			  std::move(rpbi[OFFSCREEN_OFFSET]) }));
 
 		  staticCommandsDirty_[iImageIndex] = false;
@@ -2326,6 +2403,11 @@ public:
 #ifndef NDEBUG
 	  assert_print(static_function == staticCommandCache, "[FAIL] No static command cache match");
 #endif
+  }
+
+  void setStaticCommandsDirty() // internal usage only (trigger)
+  {
+	  setStaticCommandsDirty(staticCommandCache);
   }
 
   /// Build a static draw buffer. 
@@ -2437,11 +2519,11 @@ public:
 		  {
 			vk::Fence const cbFence{ presentDrawBuffers_.fence[0][imageIndex] }; // clear cb fence can safetly be omitted/ignored for this queue submission only requires one fence
 			device.waitForFences(cbFence, VK_TRUE, umax);
-
+			device.resetFences(cbFence);				// have to wait on associatted fence, and reset for next iteration
+			
 			vk::CommandBuffer const pb{ *presentDrawBuffers_.cb[0][imageIndex] }; // previously written by setStaticPresentCommands (above)
 
 		  //----------// PRESENT (POST AA) FINAL SUBMIT // **waiting on nothing
-		
 			vk::SubmitInfo submit{};
 			submit.waitSemaphoreCount = 0;
 			submit.pWaitSemaphores = nullptr;
@@ -2450,8 +2532,7 @@ public:
 			submit.pCommandBuffers = &pb;				// submitting presents' static cb
 			submit.signalSemaphoreCount = 1;
 			submit.pSignalSemaphores = &ccSema;			// signalling commands complete
-			
-			device.resetFences(cbFence);				// have to wait on associatted fence, and reset for next iteration
+
 			graphicsQueue_.submit(1, &submit, cbFence);
 		  }
 
@@ -2468,22 +2549,26 @@ public:
 		  {
 			  vk::Fence const cbFence{ clearDrawBuffers_.fence[0][imageIndex] }; // clear cb fence can safetly be omitted/ignored for this queue submission only requires one fence
 			  device.waitForFences(cbFence, VK_TRUE, umax);
+			  device.resetFences(cbFence);
+			
+			  async_long_task::enqueue<background_critical>(
+				  // non-blocking submit
+				  [=] {
+					  vk::CommandBuffer const cb{ *clearDrawBuffers_.cb[0][imageIndex] }; // previously written by setStaticClearCommands (above)
 
-			  vk::CommandBuffer const cb{ *clearDrawBuffers_.cb[0][imageIndex] }; // previously written by setStaticClearCommands (above)
+					//----------//CLEAR SUBMIT // **waiting on nothing
 
-			//----------//CLEAR SUBMIT // **waiting on nothing
+					  vk::SubmitInfo submit{};
+					  submit.waitSemaphoreCount = 0;
+					  submit.pWaitSemaphores = nullptr;
+					  submit.pWaitDstStageMask = 0;
+					  submit.commandBufferCount = 1;
+					  submit.pCommandBuffers = &cb;				// submitting presents' static cb
+					  submit.signalSemaphoreCount = 0;
+					  submit.pSignalSemaphores = nullptr;			// signalling commands complete
 
-			  vk::SubmitInfo submit{};
-			  submit.waitSemaphoreCount = 0;
-			  submit.pWaitSemaphores = nullptr;
-			  submit.pWaitDstStageMask = 0;
-			  submit.commandBufferCount = 1;
-			  submit.pCommandBuffers = &cb;				// submitting presents' static cb
-			  submit.signalSemaphoreCount = 0;
-			  submit.pSignalSemaphores = nullptr;			// signalling commands complete
-
-			  device.resetFences(cbFence);				// have to wait on associatted fence, and reset for next iteration
-			  graphicsQueue_.submit(1, &submit, cbFence);
+					  graphicsQueue_.submit(1, &submit, cbFence);
+				  });
 		  }
 	  }
 
@@ -2512,93 +2597,121 @@ public:
 	  // ------------------------------------------------------------------------------------------------------------------------------------------------------------
 	
 	// utilize the time between a present() and acquireNextImage()		
-
+	
 	constinit static uint32_t
 		resource_index{};		// **** only "compute, dynamic, post_submit_render" should use the resource_index, otherwise use imageIndex ******
 		  					// dynamic uses imageIndex, but uses resource_index to refer to the objects worked on in post_submit_render
 	
-	vk::Semaphore const tcSema[2]{ *semaphores[resource_index].transferCompleteSemaphore_[0], *semaphores[resource_index].transferCompleteSemaphore_[1] };
-	vk::Semaphore const cSema{ *semaphores[resource_index].computeCompleteSemaphore_ };
-		
-	vk::Fence const overlay_dynamic_fence[2]{ overlayDrawBuffers_.fence[eOverlayBuffers::TRANSFER][resource_index], dynamicDrawBuffers_.fence[0][resource_index] };   // bugfix: now properly double-buffered, no longer serializes frame by having 0 here instead of resource_index!
-
-	int64_t task_compute_light(0);
-	bool bAsyncCompute(false);
-	
 	resource_control::stage_resources(resource_index);		// <---- HOT PATH - CPU HOTSPOT //		
 
-	//----// UPLOAD (LIGHT) // // **waiting on nothing
-	{
-		vk::Fence const dma_transfer_fence = computeDrawBuffers_.fence[eComputeBuffers::TRANSFER][resource_index]; // only one fence is required for the submission of TRANSFER and TRANSFER_LIGHT command buffers.
-		if (computeDrawBuffers_.queued[eComputeBuffers::TRANSFER][resource_index]) {
-			device.waitForFences(dma_transfer_fence, VK_TRUE, umax);			// protect
-			computeDrawBuffers_.queued[eComputeBuffers::TRANSFER][resource_index] = false; // reset
+	vk::Semaphore const tcSema[2]{ *semaphores[resource_index].transferCompleteSemaphore_[0], *semaphores[resource_index].transferCompleteSemaphore_[1] };
+	vk::Semaphore const cSema{ *semaphores[resource_index].computeCompleteSemaphore_ };
+
+	vk::Fence const overlay_dynamic_fence[2]{ overlayDrawBuffers_.fence[eOverlayBuffers::TRANSFER][resource_index], dynamicDrawBuffers_.fence[0][resource_index] };   // bugfix: now properly double-buffered, no longer serializes frame by having 0 here instead of resource_index!
+
+	bool async_compute_enabled(false);
+	
+	{ // [transfer & compute]
+
+		// limit lighting to update every critical_delta() duration (16.6ms)
+		constinit static tTime tLast{ zero_time_point };
+		constinit static duration tAccumulated{ zero_time_duration };
+		
+		tTime const tNow(high_resolution_clock::now());
+		
+		tAccumulated += (tNow - tLast);
+		tLast = tNow;
+		
+		async_compute_enabled = (tAccumulated >= critical_delta() * 2);
+		
+		if (async_compute_enabled) {
+
+			tAccumulated -= critical_delta() * 2;
+			if (tAccumulated >= critical_delta()) {
+				tAccumulated = zero_time_duration; // reset on overflow
+			}
 		}
-		computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = false; // reset
+		//----// UPLOAD (LIGHT) // // **waiting on nothing
+		{ // [transfer]
+			
+			vk::Fence const dma_transfer_fence = computeDrawBuffers_.fence[eComputeBuffers::TRANSFER][resource_index]; // only one fence is required for the submission of TRANSFER and TRANSFER_LIGHT command buffers.
+			if (computeDrawBuffers_.queued[eComputeBuffers::TRANSFER][resource_index]) {
+				device.waitForFences(dma_transfer_fence, VK_TRUE, umax);			// protect
+				computeDrawBuffers_.queued[eComputeBuffers::TRANSFER][resource_index] = false; // reset
+			}
+			device.resetFences(dma_transfer_fence);
+			computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = false; // reset
 
-		vk::CommandBuffer const compute_uploads[3] = { *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER][resource_index], *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER_LIGHT][resource_index], nullptr };
+			vk::CommandBuffer const compute_uploads[3] = { *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER][resource_index], *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER_LIGHT][resource_index], nullptr };
 
-		// upload light
-		bool const upload_light = gpu_compute(std::forward<compute_pass&& __restrict>({ compute_uploads[eComputeBuffers::TRANSFER], compute_uploads[eComputeBuffers::TRANSFER_LIGHT], compute_uploads[eComputeBuffers::COMPUTE_LIGHT], resource_index }));
+			// upload light
+			gpu_compute(std::forward<compute_pass&& __restrict>({ compute_uploads[eComputeBuffers::TRANSFER], compute_uploads[eComputeBuffers::TRANSFER_LIGHT], compute_uploads[eComputeBuffers::COMPUTE_LIGHT], resource_index, transferQueueFamilyIndex(), computeQueueFamilyIndex(), async_compute_enabled }));
 
-		// COMPUTE DMA TRANSFER SUBMIT //
+			// COMPUTE DMA TRANSFER SUBMIT //
+			{
+				vk::SubmitInfo submit{};
+				submit.waitSemaphoreCount = 0;
+				submit.pWaitSemaphores = nullptr;			// **waiting on nothing
+				submit.pWaitDstStageMask = nullptr;
+				submit.commandBufferCount = 1 + (uint32_t)async_compute_enabled;				// submitting dma cb(s) [always transfer] [optional transfer light]
+				submit.pCommandBuffers = &compute_uploads[eComputeBuffers::TRANSFER];
+				submit.signalSemaphoreCount = (uint32_t)async_compute_enabled;
+				submit.pSignalSemaphores = &tcSema[0];		// signal for compute
 
-		vk::SubmitInfo submit{};
-		submit.waitSemaphoreCount = 0;
-		submit.pWaitSemaphores = nullptr;			// **waiting on nothing
-		submit.pWaitDstStageMask = nullptr;
-		submit.commandBufferCount = 1 + (uint32_t)upload_light;				// submitting dma cb
-		submit.pCommandBuffers = &compute_uploads[eComputeBuffers::TRANSFER];
-		submit.signalSemaphoreCount = (uint32_t)upload_light;
-		submit.pSignalSemaphores = upload_light ? &tcSema[0] : nullptr;			// signal for compute
+				transferQueue_[resource_index].submit(1, &submit, dma_transfer_fence);
 
-		device.resetFences(dma_transfer_fence);
-		transferQueue_[resource_index].submit(1, &submit, dma_transfer_fence);
+				computeDrawBuffers_.queued[eComputeBuffers::TRANSFER][resource_index] = true;
 
-		computeDrawBuffers_.queued[eComputeBuffers::TRANSFER][resource_index] = true;
+				//--------------// COMPUTE SUBMIT (LIGHT) // // **waiting on upload light
+				computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = async_compute_enabled;
+			}
+		}
+		if (async_compute_enabled) { // [compute]
+			
+			vk::CommandBuffer const compute_process[3] = { nullptr, nullptr, *computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_LIGHT][resource_index] };
 
-		if (upload_light) {
-			//--------------// COMPUTE SUBMIT (LIGHT) // // **waiting on upload light
-			computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = true;
-			bAsyncCompute = true;
+			vk::Fence const compute_fence = computeDrawBuffers_.fence[eComputeBuffers::COMPUTE_LIGHT][resource_index];
+			if (computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index]) {
+				device.waitForFences(compute_fence, VK_TRUE, umax);
+				computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index] = false; // reset
+			}
+			device.resetFences(compute_fence);
 
-			//task_compute_light = async_long_task::enqueue<background_critical>(
-				// non-blocking submit
-				//[=] {
-					vk::CommandBuffer const compute_process[3] = { nullptr, nullptr, *computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_LIGHT][resource_index] };
+			// compute light
+			gpu_compute(std::forward<compute_pass&& __restrict>({ compute_process[eComputeBuffers::TRANSFER], compute_process[eComputeBuffers::TRANSFER_LIGHT], compute_process[eComputeBuffers::COMPUTE_LIGHT], resource_index, transferQueueFamilyIndex(), computeQueueFamilyIndex(), async_compute_enabled }));    // compute part resets the dirty state that transfer set
 
-					vk::Fence const compute_fence = computeDrawBuffers_.fence[eComputeBuffers::COMPUTE_LIGHT][resource_index];
-					if (computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index]) {
-						device.waitForFences(compute_fence, VK_TRUE, umax);
-						computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index] = false; // reset
-					}
+			{
+				vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eComputeShader };
+				vk::SubmitInfo submit{};
+				submit.waitSemaphoreCount = 1;
+				submit.pWaitSemaphores = &tcSema[0];				// waiting on transfer completion only if transfer in progress, otherwise waiting on nothing
+				submit.pWaitDstStageMask = &waitStages;
+				submit.commandBufferCount = 1;
+				submit.pCommandBuffers = &compute_process[eComputeBuffers::COMPUTE_LIGHT];				// submitting compute cb
+				submit.signalSemaphoreCount = 1;
+				submit.pSignalSemaphores = &cSema;			// signalling compute cb completion
 
-					gpu_compute(std::forward<compute_pass&& __restrict>({ compute_process[eComputeBuffers::TRANSFER], compute_process[eComputeBuffers::TRANSFER_LIGHT], compute_process[eComputeBuffers::COMPUTE_LIGHT], resource_index }));    // compute part resets the dirty state that transfer set
+				computeQueue_[resource_index].submit(1, &submit, compute_fence);
 
-					vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eComputeShader };
-
-					vk::SubmitInfo submit{};
-					submit.waitSemaphoreCount = (uint32_t)computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index];
-					submit.pWaitSemaphores = &tcSema[0];				// waiting on transfer completion only if transfer in progress, otherwise waiting on nothing
-					submit.pWaitDstStageMask = &waitStages;
-					submit.commandBufferCount = 1;
-					submit.pCommandBuffers = &compute_process[eComputeBuffers::COMPUTE_LIGHT];				// submitting compute cb
-					submit.signalSemaphoreCount = 1;
-					submit.pSignalSemaphores = &cSema;			// signalling compute cb completion
-
-					device.resetFences(compute_fence);
-					computeQueue_[resource_index].submit(1, &submit, compute_fence);
-
-					computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index] = true;
-				//});
+				computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index] = true;
+			}
+		}
+		
+		constinit static bool async_compute_enabled_last(false);
+		
+		if (async_compute_enabled != async_compute_enabled_last) {
+			
+			setStaticCommandsDirty(); // trigger update required
+			async_compute_enabled_last = async_compute_enabled;
 		}
 	}
 
 	//----// UPLOAD & OVERLAY // // **waiting on nothing
 	{
 		device.waitForFences(2, overlay_dynamic_fence, VK_TRUE, umax);				// protect 
-
-		vk::CommandBuffer do_cb[2] = { *dynamicDrawBuffers_.cb[0][resource_index], *overlayDrawBuffers_.cb[eOverlayBuffers::TRANSFER][resource_index] };
+		device.resetFences(2, overlay_dynamic_fence);
+		
+		vk::CommandBuffer do_cb[2]{ *dynamicDrawBuffers_.cb[0][resource_index], *overlayDrawBuffers_.cb[eOverlayBuffers::TRANSFER][resource_index] };
 
 		{ // ######### begin overlay transfer cb update (spawned)
 			// staging
@@ -2611,19 +2724,16 @@ public:
 		}
 
 		// DYNAMIC & OVERLAY DYNAMIC SUBMIT //
-		{
-			vk::SubmitInfo submit{};
-			submit.waitSemaphoreCount = 0;
-			submit.pWaitSemaphores = nullptr;				// **waiting on nothing
-			submit.pWaitDstStageMask = nullptr;
-			submit.commandBufferCount = 2;				// submitting dynamic cb & overlay's dynamic cb
-			submit.pCommandBuffers = do_cb;
-			submit.signalSemaphoreCount = 1;
-			submit.pSignalSemaphores = &tcSema[1];			// signal for dynamic cb in slot 0, signal for overlay dynamic cb in slot 1 (completion)
+		vk::SubmitInfo submit{};
+		submit.waitSemaphoreCount = 0;
+		submit.pWaitSemaphores = nullptr;				// **waiting on nothing
+		submit.pWaitDstStageMask = nullptr;
+		submit.commandBufferCount = 2;				// submitting dynamic cb & overlay's dynamic cb
+		submit.pCommandBuffers = do_cb;
+		submit.signalSemaphoreCount = 1;
+		submit.pSignalSemaphores = &tcSema[1];			// signal for dynamic cb in slot 0, signal for overlay dynamic cb in slot 1 (completion)
 
-			device.resetFences(2, overlay_dynamic_fence);
-			transferQueue_[!resource_index].submit(1, &submit, overlay_dynamic_fence[1]); // <---- this is opposite transfer queue on purpose so dma transfers are simultaneous
-		}
+		transferQueue_[!resource_index].submit(1, &submit, overlay_dynamic_fence[1]); // <---- this is opposite transfer queue on purpose so dma transfers are simultaneous
 	}
 
 		//----// COMPUTE SUBMIT [[deprecated]] (TEXTURESHADERS)// // **waiting on nothing
@@ -2668,9 +2778,6 @@ public:
 		return(resource_index); // doesn't change resource_index on failure in normal path (frames 0 & 1)
 
 	//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%//
-	//[[likely]] if (bAsyncCompute) { // *bugfix - required - must ensure compute has started, was submitted prior to this graphics submission
-	//	async_long_task::wait<background_critical>(task_compute_light, "compute light");
-	//}
 	
 	vk::Semaphore const iatccSema[3] = { iaSema, tcSema[1], cSema };
 	vk::Semaphore const staticSema = *semaphores[imageIndex].staticCompleteSemaphore_;
@@ -2678,19 +2785,19 @@ public:
 	{ // graphics path
 		//----------// STATIC SUBMIT // // **waiting on input acquire, textureshaders, upload & overlay, compute light
 		{
-			vk::Fence const static_fence = staticDrawBuffers_.fence[0][imageIndex];
+			vk::Fence const static_fence(staticDrawBuffers_.fence[0][imageIndex]);
 
+			device.waitForFences(static_fence, VK_TRUE, umax);
 			if (staticCommandsDirty_[imageIndex]) {
-				device.waitForFences(static_fence, VK_TRUE, umax);
-
-				setStaticCommands(staticCommandCache, imageIndex);
+				setStaticCommands(staticCommandCache, async_compute_enabled, imageIndex);
 			}
-
-			vk::CommandBuffer const cb = *staticDrawBuffers_.cb[0][imageIndex];
+			device.resetFences(static_fence);
+			
+			vk::CommandBuffer const cb(*staticDrawBuffers_.cb[0][imageIndex]);
 			vk::PipelineStageFlags waitStages[3] = { vk::PipelineStageFlagBits::eVertexInput, vk::PipelineStageFlagBits::eFragmentShader, vk::PipelineStageFlagBits::eFragmentShader }; // wait at stage data is required
 
 			vk::SubmitInfo submit{};
-			submit.waitSemaphoreCount = 2 + (uint32_t)bAsyncCompute;
+			submit.waitSemaphoreCount = 2 + (uint32_t)async_compute_enabled;
 			submit.pWaitSemaphores = iatccSema;		// waiting on dynamic transfer & input acquire & compute processing (both texture and light)
 			submit.pWaitDstStageMask = waitStages;
 			submit.commandBufferCount = 1;
@@ -2699,35 +2806,32 @@ public:
 			submit.pSignalSemaphores = &staticSema;		// signalling static cb completion
 
 			// ########### FRAMES FIRST USAGE OF GRAPHICS QUEUE ################ //
-			device.resetFences(static_fence);
 			graphicsQueue_.submit(1, &submit, static_fence);
 		}
 
 		//	   graphics
 		// 	   |     |
 		// graphics  transfer
+		{
+			vk::Fence const cbFenceReadback(gpuReadbackBuffers_.fence[0][imageIndex]);
+			device.waitForFences(cbFenceReadback, VK_TRUE, umax);
+			device.resetFences(cbFenceReadback);
 
-		async_long_task::enqueue<background_critical>(
-			// non-blocking submit
-			[=] {
-				vk::Fence const cbFenceReadback = gpuReadbackBuffers_.fence[0][imageIndex];
-				device.waitForFences(cbFenceReadback, VK_TRUE, umax);
+			vk::CommandBuffer const gb = *gpuReadbackBuffers_.cb[0][imageIndex];
+			vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eTransfer };
 
-				vk::CommandBuffer const gb = *gpuReadbackBuffers_.cb[0][imageIndex];
-				vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eTransfer };
+			vk::SubmitInfo submit{};
+			submit.waitSemaphoreCount = 1;
+			submit.pWaitSemaphores = &staticSema;		// waiting on static completion
+			submit.pWaitDstStageMask = &waitStages;
+			submit.commandBufferCount = 1;
+			submit.pCommandBuffers = &gb;				// submitting gpu readbacks' static cb
+			submit.signalSemaphoreCount = 0;
+			submit.pSignalSemaphores = nullptr;
 
-				vk::SubmitInfo submit{};
-				submit.waitSemaphoreCount = 1;
-				submit.pWaitSemaphores = &staticSema;		// waiting on static completion
-				submit.pWaitDstStageMask = &waitStages;
-				submit.commandBufferCount = 1;
-				submit.pCommandBuffers = &gb;				// submitting gpu readbacks' static cb
-				submit.signalSemaphoreCount = 0;
-				submit.pSignalSemaphores = nullptr;
-
-				device.resetFences(cbFenceReadback);				// have to wait on associatted fence, and reset for next iteration
-				transferQueue_[resource_index].submit(1, &submit, cbFenceReadback);
-			});
+			// have to wait on associatted fence, and reset for next iteration
+			transferQueue_[resource_index].submit(1, &submit, cbFenceReadback);
+		}
 
 		//	graphics
 		// 	   |
@@ -2736,24 +2840,23 @@ public:
 		// **inherent wait between graphics queue operations. they serialize and it is not neccessary to signal a semaphore as there is no inter-queue dependencies.
 
 //----------// OVERLAY SUBMIT // **waiting on overlay upload is not necessary as the wait has already taken place in static. The semaphore combines dynamic upload + overlay upload. Static depends on dynamic uploads completion. Single semaphore. Single signal & wait finished in STATIC.
-		{
-			vk::CommandBuffer ob{ *overlayDrawBuffers_.cb[eOverlayBuffers::RENDER][imageIndex] };
+		{		
+			vk::CommandBuffer ob(*overlayDrawBuffers_.cb[eOverlayBuffers::RENDER][imageIndex]);
 
 			// fence not required ....
-			static vk::ClearValue const clearArray[] = { {}, {}, {}, {}, vk::ClearValue{ std::array<uint32_t, 4>{0, 0, 0, 0}}, {} };
+			constinit static vk::ClearValue const clearArray[] = { vk::ClearValue{ std::array<uint32_t, 4>{0, 0, 0, 0}}, {} };
 			overlay_function(overlay_renderpass{ nullptr, &ob, imageIndex,
-				std::forward<vk::RenderPassBeginInfo&& __restrict>(vk::RenderPassBeginInfo(*overlayPass_, *framebuffers_[eFrameBuffers::COLOR_DEPTH][imageIndex], vk::Rect2D{ {0, 0}, {width_, height_} }, _countof(clearArray), clearArray)) });  // build render cb
-				
+				std::forward<vk::RenderPassBeginInfo&& __restrict>(vk::RenderPassBeginInfo(*overlayPass_, *framebuffers_[eFrameBuffers::OVERLAY][imageIndex], vk::Rect2D{ {0, 0}, {width_, height_} }, _countof(clearArray), clearArray)) });  // build render cb
+			
 			vk::SubmitInfo submit{};
 			submit.waitSemaphoreCount = 0;
 			submit.pWaitSemaphores = nullptr;			// prior submit already waited on &tcSema[1] (contains semaphor that represents dynamic + overlay transfer)
 			submit.pWaitDstStageMask = nullptr;
 			submit.commandBufferCount = 1;
-			submit.pCommandBuffers = &ob;				// submitting overlay's static cb
+			submit.pCommandBuffers = &ob;				// submitting overlay's dynamic cb's
 			submit.signalSemaphoreCount = 0;
-			submit.pSignalSemaphores = nullptr;			// signalling commands complete
+			submit.pSignalSemaphores = nullptr;
 
-			// fence already reset in batched op above
 			graphicsQueue_.submit(1, &submit, overlay_dynamic_fence[0]);
 		}
 
@@ -2778,6 +2881,7 @@ public:
   vk::RenderPass const& __restrict downPass() const { return(*downPass_); }
   vk::RenderPass const& __restrict upPass() const { return(*upPass_); }
   vk::RenderPass const& __restrict midPass() const { return(*midPass_); }
+  vk::RenderPass const& __restrict transPass() const { return(*transPass_); }
   vk::RenderPass const& __restrict overlayPass() const { return(*overlayPass_); }
   vk::RenderPass const& __restrict postAAPass(uint32_t const index) const { return(*postAAPass_[index]); }
   vk::RenderPass const& __restrict finalPass() const { return(*finalPass_); }
@@ -2800,7 +2904,9 @@ public:
 	downPass_.release();
 	upPass_.release();
 	midPass_.release();
+	transPass_.release();
 	overlayPass_.release();
+	
 	for (uint32_t p = 0; p < _countof(postAAPass_); ++p) {
 		postAAPass_[p].release();
 	}
@@ -2833,10 +2939,15 @@ public:
   vk::Queue const& __restrict computeQueue(uint32_t const index) const { return(computeQueue_[index]); }
   vk::Queue const& __restrict transferQueue(uint32_t const index) const { return(transferQueue_[index]); }
 
+  // Cached Queue Family Index //
+  uint32_t const graphicsQueueFamilyIndex() const { return(graphicsQueueFamilyIndex_); }
+  uint32_t const computeQueueFamilyIndex() const { return(computeQueueFamilyIndex_); }
+  uint32_t const transferQueueFamilyIndex() const { return(transferQueueFamilyIndex_); }
+
   // return image views //
   vk::ImageView const colorImageView() const { return(colorImage_.imageView()); }
   vk::ImageView const guiImageView() const { return(guiImage_.resolved.imageView()); }
-  vk::ImageView const lastColorImageView() const { return(lastColorImage_.imageView()); }
+  vk::ImageView const lastColorImageView(uint32_t const index) const { return(lastColorImage_[index].imageView()); }   //   0 - for opaques (used by transparency)   1 - for opaques & transparency (used by PostAA)   2 - for anti-aliased last frame (used by temporal AA)
 
   vk::ImageView const colorVolumetricDownResCheckeredImageView() const { return(colorVolumetricImage_.checkered.imageView()); }
   vk::ImageView const colorVolumetricDownResImageView() const { return(colorVolumetricImage_.resolved.imageView()); }
@@ -2854,7 +2965,7 @@ public:
   // return images //
   vku::ColorAttachmentImage&	colorImage() { return(colorImage_); }
   vku::ColorAttachmentImage&	mouseImage() { return(mouseImage_.resolved); }
-  vku::ColorAttachmentImage&	lastColorImage() { return(lastColorImage_); }
+  vku::ColorAttachmentImage&	lastColorImage(uint32_t const index) { return(lastColorImage_[index]); } // 0 - opaques,  1 - opaques & transparency, 2 - last frame
   vku::TextureImageStorage2D&	colorVolumetricDownResCheckeredImage() { return(colorVolumetricImage_.checkered); }
   vku::TextureImageStorage2D&	colorReflectionDownResCheckeredImage() { return(colorReflectionImage_.checkered); }
   vku::ColorAttachmentImage&	colorVolumetricImage() { return(colorVolumetricImage_.upsampled); }
@@ -2903,7 +3014,7 @@ private:
   vk::Instance instance_;
   vk::SurfaceKHR surface_;
   vk::UniqueSwapchainKHR swapchain_;
-  vk::UniqueRenderPass zPass_, downPass_, upPass_, midPass_, overlayPass_, postAAPass_[3], finalPass_, clearPass_, offscreenPass_;
+  vk::UniqueRenderPass zPass_, downPass_, upPass_, midPass_, transPass_, overlayPass_, postAAPass_[3], finalPass_, clearPass_, offscreenPass_;
   
   struct semaphores {
 	  vk::UniqueSemaphore staticCompleteSemaphore_;
@@ -2920,7 +3031,7 @@ private:
   std::vector<vk::ImageView> imageViews_;
   std::vector<vk::Image> images_;
 
-  vk::UniqueFramebuffer* framebuffers_[eFrameBuffers::_size()] = { nullptr };
+  vk::UniqueFramebuffer* framebuffers_[eFrameBuffers::_size()]{};
   CommandBufferContainer<eComputeBuffers::_size()> computeDrawBuffers_;	// one for transfer, one for transfering light, one for computing light
   CommandBufferContainer<1> staticDrawBuffers_;
   CommandBufferContainer<1> dynamicDrawBuffers_;
@@ -2930,7 +3041,10 @@ private:
   CommandBufferContainer<1> gpuReadbackBuffers_;
 
   vku::ColorAttachmentImage colorImage_;	  // multisampled only
-  vku::ColorAttachmentImage lastColorImage_;  // not antialiased and does not contain GUI, for that use PostAA lastColorImage - cPostProcess->h
+
+  vku::ColorAttachmentImage lastColorImage_[3];  // first image will be resolved to contain render of opaques, this is used by transparency as a "grab pass" of only opaques
+												 // second image  "" ""  ""  ""  ""   "" ""  "" "" "" opaques & transparents, this is used by PostAA as the main color texture sampled for the final frame.
+												 // third image is the final anti-aliased last color frame, used by temporal AA
   vku::ColorAttachmentImage colorDummy_;	  // post aa dummy image
 
   struct {
@@ -2964,7 +3078,9 @@ private:
   vku::DepthImage					depthImageResolve_[2];
   vku::StencilAttachmentImage		stencilCheckerboard_[2];
 
-  uint32_t graphicsQueueFamilyIndex_ = 0;
+  uint32_t graphicsQueueFamilyIndex_ = 0,
+		   computeQueueFamilyIndex_ = 0,
+		   transferQueueFamilyIndex_ = 0;
   uint32_t width_;
   uint32_t height_;
   vk::Format swapchainImageFormat_ = vk::Format::eB8G8R8A8Unorm;

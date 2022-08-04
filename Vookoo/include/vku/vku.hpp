@@ -71,12 +71,12 @@
 #include <fmt/fmt.h>
 #include <Utility/stringconv.h>
 
-#define VULKAN_API_VERSION_USED VK_API_VERSION_1_2
+#define VULKAN_API_VERSION_USED VK_API_VERSION_1_3
 
 #include <vku/vku_addon.hpp>
 
 #define VMA_STATIC_VULKAN_FUNCTIONS 1 // route to volk
-#define VMA_VULKAN_VERSION 1002000 // Vulkan 1.2
+#define VMA_VULKAN_VERSION 1003000 // Vulkan 1.3
 #define VMA_DEDICATED_ALLOCATION 1
 #define VMA_MEMORY_BUDGET 1
 
@@ -2899,7 +2899,7 @@ public:
   // For specifying the specific source and destination stages  vk::PipelineStageFlagBits (advanced usage):
   template<size_t const image_count, bool const bDontCareSrcUndefined = false>
   static void setLayout(std::array<vku::GenericImage* const, image_count> const& __restrict images, 
-	  vk::CommandBuffer const& __restrict cb, vk::ImageLayout const newLayout, vk::PipelineStageFlags srcStageMask, int32_t const AccessUsed, vk::PipelineStageFlags const dstStageMask, int32_t const AccessRequired, vk::ImageAspectFlags const aspectMask = vk::ImageAspectFlagBits::eColor, vk::ImageLayout const ForceLayoutUpdate = vk::ImageLayout::eUndefined) {
+	  vk::CommandBuffer const& __restrict cb, vk::ImageLayout const newLayout, vk::PipelineStageFlags srcStageMask, int32_t const AccessUsed, vk::PipelineStageFlags const dstStageMask, int32_t const AccessRequired, uint32_t const srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, uint32_t const dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, vk::ImageAspectFlags const aspectMask = vk::ImageAspectFlagBits::eColor, vk::ImageLayout const ForceLayoutUpdate = vk::ImageLayout::eUndefined) {
 
 	  vk::DependencyFlags dependencyFlags{};
 	  std::array<vk::ImageMemoryBarrier, image_count> imbs;
@@ -2930,8 +2930,8 @@ public:
 
 		  images[i]->s.currentLayout = newLayout;
 
-		  imbs[used_image_count].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		  imbs[used_image_count].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		  imbs[used_image_count].srcQueueFamilyIndex = srcQueueFamilyIndex;  // (default) VK_QUEUE_FAMILY_IGNORED;
+		  imbs[used_image_count].dstQueueFamilyIndex = dstQueueFamilyIndex;  // (default) VK_QUEUE_FAMILY_IGNORED;
 		  imbs[used_image_count].oldLayout = oldLayout;
 		  imbs[used_image_count].newLayout = newLayout;
 		  imbs[used_image_count].image = images[i]->s.image;
@@ -3025,7 +3025,7 @@ public:
   template<size_t const image_count>
   static void setLayoutFromUndefined(std::array<vku::GenericImage* const, image_count> const& __restrict images,
 									 vk::CommandBuffer const& __restrict cb, vk::ImageLayout const newLayout, vk::PipelineStageFlags const dstStageMask, int32_t const AccessRequired, vk::ImageAspectFlags const aspectMask = vk::ImageAspectFlagBits::eColor) {
-	  GenericImage::setLayout<image_count, true>(images, cb, newLayout, vk::PipelineStageFlagBits::eTopOfPipe, 0/*N/A*/, dstStageMask, AccessRequired, aspectMask);
+	  GenericImage::setLayout<image_count, true>(images, cb, newLayout, vk::PipelineStageFlagBits::eTopOfPipe, 0/*N/A*/, dstStageMask, AccessRequired, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, aspectMask);
   }
   /// Set what the image thinks is its current layout (ie. the old layout in an image barrier).
   void setCurrentLayout(vk::ImageLayout oldLayout) {

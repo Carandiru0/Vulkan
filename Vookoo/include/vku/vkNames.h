@@ -23,6 +23,7 @@ namespace vkNames
 		[[maybe_unused]] static inline constexpr char const* const CLEAR = "[fb] Clears";
 		[[maybe_unused]] static inline constexpr char const* const PRESENT = "[fb] Present";
 		[[maybe_unused]] static inline constexpr char const* const POSTAA = "[fb] PostAA";
+		[[maybe_unused]] static inline constexpr char const* const OVERLAY = "[fb] Overlay";
 		[[maybe_unused]] static inline constexpr char const* const COLOR_DEPTH = "[fb] Color Depth";
 		[[maybe_unused]] static inline constexpr char const* const OFFSCREEN = "[fb] Offscreen Color Depth";
 		[[maybe_unused]] static inline constexpr char const* const MID_COLOR_DEPTH = "[fb] Mid Color Depth";
@@ -38,6 +39,7 @@ namespace vkNames
 		[[maybe_unused]] static inline constexpr char const* const POSTAA = "[rp] PostAA";
 		[[maybe_unused]] static inline constexpr char const* const OVERLAY = "[rp] Overlay";
 		[[maybe_unused]] static inline constexpr char const* const OFFSCREEN = "[rp] Offscreen";
+		[[maybe_unused]] static inline constexpr char const* const TRANSPASS = "[rp] Transparency";
 		[[maybe_unused]] static inline constexpr char const* const MIDPASS = "[rp] Mid";
 		[[maybe_unused]] static inline constexpr char const* const UPPASS = "[rp] Up";
 		[[maybe_unused]] static inline constexpr char const* const DOWNPASS = "[rp] Down";
