@@ -342,11 +342,11 @@ public:
 
 			uint32_t queueCount(0);
 
-			if (graphicsQueueFamilyIndex_ == minQueueIndex) {
-				queueCount = 1; // single dedicated queue for graphics
+			if (transferQueueFamilyIndex_ == minQueueIndex ) {
+				queueCount = 2; // two independent transfer queues
 			}
 			else {
-				queueCount = 2; // compute and transfer have 2 dedicated queues each.
+				queueCount = 1; // single dedicated queue for graphics, single dedicated queue for compute
 			}
 			// *bugfix - real-time priority stutters and intefereres with the cpu, high is faster and more stable (fps wise) than the default "medium". Unfortunately this requires the program to be run as Administrator. (which is handled here and at extension load-time)
 			dm.queue<VK_QUEUE_GLOBAL_PRIORITY_HIGH_EXT>(minQueueIndex, queueCount); // queue up the next family index, in ascending order as required for indices to properly match the queue family index
@@ -533,7 +533,7 @@ private:
 };
 
 								           
-BETTER_ENUM(eCommandPools, uint32_t const, DEFAULT_POOL = 0, OVERLAY_POOL, TRANSIENT_POOL, DMA_TRANSFER_POOL_PRIMARY, DMA_TRANSFER_POOL_SECONDARY, COMPUTE_POOL_PRIMARY, COMPUTE_POOL_SECONDARY);
+BETTER_ENUM(eCommandPools, uint32_t const, DEFAULT_POOL = 0, OVERLAY_POOL, TRANSIENT_POOL, DMA_TRANSFER_POOL_PRIMARY, DMA_TRANSFER_POOL_SECONDARY, COMPUTE_POOL);
 BETTER_ENUM(eFrameBuffers, uint32_t const, DEPTH, HALF_COLOR_ONLY, FULL_COLOR_ONLY, MID_COLOR_DEPTH, COLOR_DEPTH, OVERLAY, POSTAA_0, POSTAA_1, POSTAA_2, PRESENT, CLEAR, OFFSCREEN);
 BETTER_ENUM(eOverlayBuffers, uint32_t const, TRANSFER, RENDER);
 BETTER_ENUM(eComputeBuffers, uint32_t const, TRANSFER, TRANSFER_LIGHT, COMPUTE_LIGHT);
@@ -1080,10 +1080,8 @@ public:
 	  graphicsQueue_    = device.getQueue(graphicsQueueFamilyIndex, 0);
 	  VKU_SET_OBJECT_NAME(vk::ObjectType::eQueue, (VkQueue)graphicsQueue_, vkNames::Queue::GRAPHICS);
 
-	  computeQueue_[0]  = device.getQueue(computeQueueFamilyIndex, 0);
-	  VKU_SET_OBJECT_NAME(vk::ObjectType::eQueue, (VkQueue)computeQueue_[0], vkNames::Queue::COMPUTE);
-	  computeQueue_[1]  = device.getQueue(computeQueueFamilyIndex, 1);
-	  VKU_SET_OBJECT_NAME(vk::ObjectType::eQueue, (VkQueue)computeQueue_[1], vkNames::Queue::COMPUTE);
+	  computeQueue_  = device.getQueue(computeQueueFamilyIndex, 0);
+	  VKU_SET_OBJECT_NAME(vk::ObjectType::eQueue, (VkQueue)computeQueue_, vkNames::Queue::COMPUTE);
 
 	  transferQueue_[0] = device.getQueue(transferQueueFamilyIndex, 0);
 	  VKU_SET_OBJECT_NAME(vk::ObjectType::eQueue, (VkQueue)transferQueue_[0], vkNames::Queue::TRANSFER);
@@ -2174,8 +2172,7 @@ public:
 	  }
 	  {
 		  vk::CommandPoolCreateInfo cpci{ ccbits::eTransient | ccbits::eResetCommandBuffer, computeQueueFamilyIndex };
-		  commandPool_[eCommandPools::COMPUTE_POOL_PRIMARY] = device.createCommandPoolUnique(cpci).value;
-		  commandPool_[eCommandPools::COMPUTE_POOL_SECONDARY] = device.createCommandPoolUnique(cpci).value;
+		  commandPool_[eCommandPools::COMPUTE_POOL] = device.createCommandPoolUnique(cpci).value;
 	  }
 
 	  // Create draw buffers
@@ -2261,8 +2258,8 @@ public:
 		  }
 	  }
 	  { // compute render
-		  uint32_t const resource_count(compute_queue_count);
-		  vk::CommandBufferAllocateInfo cbai{ *commandPool_[eCommandPools::COMPUTE_POOL_PRIMARY], vk::CommandBufferLevel::ePrimary, resource_count };	// 2 resources
+		  uint32_t const resource_count(double_buffer_count);
+		  vk::CommandBufferAllocateInfo cbai{ *commandPool_[eCommandPools::COMPUTE_POOL], vk::CommandBufferLevel::ePrimary, resource_count };	// 2 resources
 		  computeDrawBuffers_.allocate<eComputeBuffers::COMPUTE_LIGHT>(device, cbai);
 		  for (uint32_t resource_index = 0; resource_index < resource_count; ++resource_index) {
 			  VKU_SET_OBJECT_NAME(vk::ObjectType::eCommandBuffer, (VkCommandBuffer)* computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_LIGHT][resource_index], vkNames::CommandBuffer::COMPUTE_LIGHT);
@@ -2613,28 +2610,10 @@ public:
 
 	vk::Fence const overlay_dynamic_fence[2]{ overlayDrawBuffers_.fence[eOverlayBuffers::TRANSFER][resource_index], dynamicDrawBuffers_.fence[0][resource_index] };   // bugfix: now properly double-buffered, no longer serializes frame by having 0 here instead of resource_index!
 
-	bool async_compute_enabled(false);
+	bool async_compute_enabled(true); // *bugfix - limiting lighting updates to 33ms, 16ms introduces visible "light lag" - it must be run every frame for low-latency light changes in sync with everything else.
 	
 	{ // [transfer & compute]
 
-		// limit lighting to update every critical_delta() duration (16.6ms)
-		constinit static tTime tLast{ zero_time_point };
-		constinit static duration tAccumulated{ zero_time_duration };
-		
-		tTime const tNow(high_resolution_clock::now());
-		
-		tAccumulated += (tNow - tLast);
-		tLast = tNow;
-		
-		async_compute_enabled = true;// (tAccumulated >= critical_delta() * 2);
-		
-		if (async_compute_enabled) {
-
-			tAccumulated -= critical_delta() * 2;
-			if (tAccumulated >= critical_delta()) {
-				tAccumulated = zero_time_duration; // reset on overflow
-			}
-		}
 		//----// UPLOAD (LIGHT) // // **waiting on nothing
 		{ // [transfer]
 			
@@ -2650,7 +2629,7 @@ public:
 
 			// upload light
 			async_compute_enabled = gpu_compute(std::forward<compute_pass&& __restrict>({ compute_uploads[eComputeBuffers::TRANSFER], compute_uploads[eComputeBuffers::TRANSFER_LIGHT], compute_uploads[eComputeBuffers::COMPUTE_LIGHT], resource_index, transferQueueFamilyIndex(), computeQueueFamilyIndex(), graphicsQueueFamilyIndex(), async_compute_enabled }));
-			// bugfix always submits upload due to ubo cb, but upload light and subsequent compute update are totally optional.
+			// bugfix always submits upload due to ubo cb, but upload light and subsequent compute update are totally optional. the last volume(s) generated will be used for this frame if async compute is disabled for this frame.
 			
 			// COMPUTE DMA TRANSFER SUBMIT //
 			{
@@ -2697,7 +2676,7 @@ public:
 				submit.signalSemaphoreCount = 1;
 				submit.pSignalSemaphores = &cSema;			// signalling compute cb completion
 
-				computeQueue_[resource_index].submit(1, &submit, compute_fence);
+				computeQueue_.submit(1, &submit, compute_fence); //*bugfix - there is only one compute queue (fixes flickering) two compute queues cause race condition on light probe gpu texture.
 
 				computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index] = true;
 			}
@@ -2942,7 +2921,7 @@ public:
 
   // queues //
   vk::Queue const& __restrict graphicsQueue() const { return(graphicsQueue_); }
-  vk::Queue const& __restrict computeQueue(uint32_t const index) const { return(computeQueue_[index]); }
+  vk::Queue const& __restrict computeQueue() const { return(computeQueue_); }
   vk::Queue const& __restrict transferQueue(uint32_t const index) const { return(transferQueue_[index]); }
 
   // Cached Queue Family Index //
@@ -3008,11 +2987,10 @@ private:
 	static constexpr uint32_t const double_buffer_count = 2;	// *bugfix:
 	static constexpr uint32_t const max_image_count = 2;		// double buffering only - alternating checkerboard pattern requirement: between 2 consecutive frames the pattern resets ok A|B, A|B,,,
 	static constexpr uint32_t const transfer_queue_count = 2;	//						   however for 3 consecutive the pattern is off A|B|A A|B|A (the A meets an neighbouring A) 
-	static constexpr uint32_t const compute_queue_count = 2;
 	
 	vk::Queue 
 		transferQueue_[transfer_queue_count],
-		computeQueue_[compute_queue_count],
+		computeQueue_,	 //*bugfix - there is only one compute queue (fixes flickering) two compute queues cause race condition on light probe gpu texture.
 		graphicsQueue_;
 
 	constinit static inline vk::Result _presentResult{};
