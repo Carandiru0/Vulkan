@@ -288,6 +288,9 @@ public:
 
 	// Required Extensions //
 	// internally promoted in vulkan 1.2 ADD_EXTENSION(extensions, dm, VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME, supported); if (!supported) return;
+	if (isUserAdmin()) { // only supporting boost of queue priority if program is run as administrator. Boosts to high for all queues if admin. Required only if program is run as admin.
+		ADD_EXTENSION(extensions, dm, VK_EXT_GLOBAL_PRIORITY_EXTENSION_NAME, supported); if (!supported) return;
+	}
 	ADD_EXTENSION(extensions, dm, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME, memorybudget); // optional, can use internal tracking of memory in vma if not available
 	ADD_EXTENSION(extensions, dm, VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME, fullsubgroups); // optional, optimization for compute shader subgroup usage
 	ComputePipelineMaker::fullsubgroups_supported = fullsubgroups;
@@ -321,8 +324,7 @@ public:
 	
 	
 	// Create ****QUEUES**** //
-	// *bugfix - NVIDIA does not support this extension. It's not really needed - all queue priorities were the same anyway.
-	
+
 	// *bugfix - validation error, queues need to be in correct order
 	{
 		std::list<uint32_t> queueIndices;
@@ -346,7 +348,8 @@ public:
 			else {
 				queueCount = 2; // compute and transfer have 2 dedicated queues each.
 			}
-			dm.queue(minQueueIndex, queueCount); // queue up the next family index, in ascending order as required for indices to properly match the queue family index
+			// *bugfix - real-time priority stutters and intefereres with the cpu, high is faster and more stable (fps wise) than the default "medium". Unfortunately this requires the program to be run as Administrator. (which is handled here and at extension load-time)
+			dm.queue<VK_QUEUE_GLOBAL_PRIORITY_HIGH_EXT>(minQueueIndex, queueCount); // queue up the next family index, in ascending order as required for indices to properly match the queue family index
 
 			// remove last min
 			queueIndices.remove(minQueueIndex);
@@ -1171,7 +1174,8 @@ public:
 
 			  // initial requirement //
 			  lastColorImage(2).setLayout(cb, vk::ImageLayout::eShaderReadOnlyOptimal);
-
+			  depthResolvedImage(1).setLayout(cb, vk::ImageLayout::eShaderReadOnlyOptimal);
+			
 			  // never changes layout setup : //
 			  colorVolumetricDownResCheckeredImage().setLayout(cb, vk::ImageLayout::eGeneral);
 			  colorReflectionDownResCheckeredImage().setLayout(cb, vk::ImageLayout::eGeneral);
@@ -2622,7 +2626,7 @@ public:
 		tAccumulated += (tNow - tLast);
 		tLast = tNow;
 		
-		async_compute_enabled = (tAccumulated >= critical_delta() * 2);
+		async_compute_enabled = true;// (tAccumulated >= critical_delta() * 2);
 		
 		if (async_compute_enabled) {
 
@@ -2645,8 +2649,9 @@ public:
 			vk::CommandBuffer const compute_uploads[3] = { *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER][resource_index], *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER_LIGHT][resource_index], nullptr };
 
 			// upload light
-			gpu_compute(std::forward<compute_pass&& __restrict>({ compute_uploads[eComputeBuffers::TRANSFER], compute_uploads[eComputeBuffers::TRANSFER_LIGHT], compute_uploads[eComputeBuffers::COMPUTE_LIGHT], resource_index, transferQueueFamilyIndex(), computeQueueFamilyIndex(), async_compute_enabled }));
-
+			async_compute_enabled = gpu_compute(std::forward<compute_pass&& __restrict>({ compute_uploads[eComputeBuffers::TRANSFER], compute_uploads[eComputeBuffers::TRANSFER_LIGHT], compute_uploads[eComputeBuffers::COMPUTE_LIGHT], resource_index, transferQueueFamilyIndex(), computeQueueFamilyIndex(), graphicsQueueFamilyIndex(), async_compute_enabled }));
+			// bugfix always submits upload due to ubo cb, but upload light and subsequent compute update are totally optional.
+			
 			// COMPUTE DMA TRANSFER SUBMIT //
 			{
 				vk::SubmitInfo submit{};
@@ -2678,8 +2683,9 @@ public:
 			device.resetFences(compute_fence);
 
 			// compute light
-			gpu_compute(std::forward<compute_pass&& __restrict>({ compute_process[eComputeBuffers::TRANSFER], compute_process[eComputeBuffers::TRANSFER_LIGHT], compute_process[eComputeBuffers::COMPUTE_LIGHT], resource_index, transferQueueFamilyIndex(), computeQueueFamilyIndex(), async_compute_enabled }));    // compute part resets the dirty state that transfer set
+			async_compute_enabled = gpu_compute(std::forward<compute_pass&& __restrict>({ compute_process[eComputeBuffers::TRANSFER], compute_process[eComputeBuffers::TRANSFER_LIGHT], compute_process[eComputeBuffers::COMPUTE_LIGHT], resource_index, transferQueueFamilyIndex(), computeQueueFamilyIndex(), graphicsQueueFamilyIndex(), async_compute_enabled }));    // compute part resets the dirty state that transfer set
 
+			if (async_compute_enabled)
 			{
 				vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eComputeShader };
 				vk::SubmitInfo submit{};
@@ -2779,7 +2785,7 @@ public:
 
 	//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%//
 	
-	vk::Semaphore const iatccSema[3] = { iaSema, tcSema[1], cSema };
+	vk::Semaphore const iatccSema[3] = { tcSema[1], iaSema, cSema };
 	vk::Semaphore const staticSema = *semaphores[imageIndex].staticCompleteSemaphore_;
 	
 	{ // graphics path
@@ -2794,7 +2800,7 @@ public:
 			device.resetFences(static_fence);
 			
 			vk::CommandBuffer const cb(*staticDrawBuffers_.cb[0][imageIndex]);
-			vk::PipelineStageFlags waitStages[3] = { vk::PipelineStageFlagBits::eVertexInput, vk::PipelineStageFlagBits::eFragmentShader, vk::PipelineStageFlagBits::eFragmentShader }; // wait at stage data is required
+			vk::PipelineStageFlags waitStages[3] = { vk::PipelineStageFlagBits::eVertexInput, vk::PipelineStageFlagBits::eFragmentShader, vk::PipelineStageFlagBits::eTopOfPipe }; // wait at stage data is required
 
 			vk::SubmitInfo submit{};
 			submit.waitSemaphoreCount = 2 + (uint32_t)async_compute_enabled;

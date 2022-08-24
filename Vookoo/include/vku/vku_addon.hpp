@@ -66,10 +66,10 @@ namespace vku {
 
 	/* These constants are defined in vku_addon.hpp */ // vku.hpp line ~1550 for debuging when these constants are exceeded
 	static constexpr uint32_t const // **even numbers only**
-		MAX_NUM_DESCRIPTOR_SETS = 24,
+		MAX_NUM_DESCRIPTOR_SETS = 25,
 		MAX_NUM_UNIFORM_BUFFERS = 8,
 		MAX_NUM_IMAGES = 144,
-		MAX_NUM_STORAGE_BUFFERS = 24,
+		MAX_NUM_STORAGE_BUFFERS = 25,
 		MAX_NUM_BUFFER_VIEWS = 2;
 
 	static constexpr int32_t const
@@ -159,12 +159,13 @@ namespace vku {
 		
 		uint32_t		  resource_index;
 		uint32_t		  transferQueueFamilyIndex,
-						  computeQueueFamilyIndex;
+						  computeQueueFamilyIndex,
+						  graphicsQueueFamilyIndex;
 		
 		bool			  async_compute_enabled;
 
 	} compute_pass;
-	typedef void (*const compute_function)(compute_pass&& __restrict);
+	typedef bool const (*const compute_function)(compute_pass&& __restrict);
 
 	typedef struct {
 		vk::CommandBuffer cb;

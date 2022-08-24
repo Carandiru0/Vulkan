@@ -102,6 +102,7 @@
 #endif
 
 #include <vku/vma/vk_mem_alloc.h>
+#include <Utility/winblows.h>
 
 namespace vku {
 
@@ -561,7 +562,7 @@ public:
   }
 
   /// Add one or more queues to the device from a certain family.
-  //template< VkQueueGlobalPriorityEXT const global_priority = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT >	// *bugfix - NVIDIA does not support this extension. It's not really needed - all queue priorities were the same anyway.
+  template< VkQueueGlobalPriorityEXT const global_priority = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT >	// *bugfix - NVIDIA does support this extensions as of Vulkan 1.3
   DeviceMaker &queue(uint32_t const familyIndex, uint32_t const n = 1u) {
     queue_priorities_.emplace_back(n, 1.0f);
 
@@ -569,16 +570,18 @@ public:
 										familyIndex, n,
 										queue_priorities_.back().data());
 
-	//if constexpr(VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT != global_priority) {	// only if not default global priority
-	//
-	//	static VkDeviceQueueGlobalPriorityCreateInfoEXT global_priority_ext;	// static life time required for deferred init from this function
-																				// only unique because of the template specialization
-	//	global_priority_ext.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_EXT;
-	//	global_priority_ext.globalPriority = global_priority;
-	//	global_priority_ext.pNext = nullptr;
+	if constexpr(VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT != global_priority) {	// only if not default global priority
+		
+		if (isUserAdmin()) { // *bugfix - only when process is run as administrator can the global priority be boosted to high. If not then no global priority needs to be set, as it is the default (medium) already by default!
+			constinit static VkDeviceQueueGlobalPriorityCreateInfoEXT global_priority_ext{};	// static life time required for deferred init from this function
+																								// only unique because of the template specialization - which makes it unique to priority (which is good)
+			global_priority_ext.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_EXT;
+			global_priority_ext.globalPriority = global_priority;
+			global_priority_ext.pNext = nullptr;
 
-	//	new_queue.pNext = &global_priority_ext;
-	//}
+			new_queue.pNext = &global_priority_ext;
+		}
+	}
     qci_.emplace_back(new_queue);
 
     return *this;
@@ -1592,7 +1595,7 @@ public:
 	  using pfb = vk::MemoryPropertyFlagBits;
 
 	  if (0 == maxsizebytes()) { // only allocate once
-		  *this = vku::GenericBuffer(buf::eTransferSrc, maxsize, pfb::eHostCoherent | pfb::eHostVisible, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, mapped_access, bDedicatedMemory, bPersistantMapping);
+		  *this = vku::GenericBuffer(buf::eTransferSrc, maxsize, pfb::eHostVisible, VMA_MEMORY_USAGE_AUTO_PREFER_HOST, mapped_access, bDedicatedMemory, bPersistantMapping);
 		  activesizebytes_ = maxsizebytes();
 		  clearLocal();
 	  }
