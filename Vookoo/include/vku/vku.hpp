@@ -1595,7 +1595,7 @@ public:
 	  using pfb = vk::MemoryPropertyFlagBits;
 
 	  if (0 == maxsizebytes()) { // only allocate once
-		  *this = vku::GenericBuffer(buf::eTransferSrc, maxsize, pfb::eHostVisible, VMA_MEMORY_USAGE_AUTO_PREFER_HOST, mapped_access, bDedicatedMemory, bPersistantMapping);
+		  *this = vku::GenericBuffer(buf::eTransferSrc, maxsize, pfb::eHostVisible, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, mapped_access, bDedicatedMemory, bPersistantMapping);
 		  activesizebytes_ = maxsizebytes();
 		  clearLocal();
 	  }
