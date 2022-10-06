@@ -60,6 +60,8 @@ namespace vkNames
 		[[maybe_unused]] static inline constexpr char const* const depthImageResolve = "[img] depthImageResolve";
 		[[maybe_unused]] static inline constexpr char const* const mouseImage_multisampled = "[img] mouseImage_multisampled";
 		[[maybe_unused]] static inline constexpr char const* const mouseImage_resolved = "[img] mouseImage_resolved";
+		[[maybe_unused]] static inline constexpr char const* const normalImage_multisampled = "[img] normalImage_multisampled";
+		[[maybe_unused]] static inline constexpr char const* const normalImage_resolved = "[img] normalImage_resolved";
 		[[maybe_unused]] static inline constexpr char const* const stencilCheckerboard = "[img] stencilCheckerboard";
 		[[maybe_unused]] static inline constexpr char const* const lastColorImage = "[img] lastColorImage";
 		[[maybe_unused]] static inline constexpr char const* const colorVolumetricImage_checkered = "[img] colorVolumetricImage_checkered";

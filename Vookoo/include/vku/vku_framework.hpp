@@ -1124,6 +1124,11 @@ public:
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)mouseImage_.multisampled.image(), vkNames::Image::mouseImage_multisampled);
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)mouseImage_.resolved.image(), vkNames::Image::mouseImage_resolved);
 
+		  normalImage_.multisampled = vku::ColorAttachmentImage(device, width_, height_, vku::DefaultSampleCount, transientCommandPool, graphicsQueue_, false, false, false, vk::Format::eR16G16B16A16Snorm);	// not sampled, not inputattachment, not copyable
+		  normalImage_.resolved = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, false, false, vk::Format::eR16G16B16A16Snorm);	// is sampled, not inputattachment, not copyable
+		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)normalImage_.multisampled.image(), vkNames::Image::normalImage_multisampled);
+		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)normalImage_.resolved.image(), vkNames::Image::normalImage_resolved);
+
 		  depthImageResolve_[0] = vku::DepthImage(device, width_, height_, transientCommandPool, graphicsQueue_, true, false);  // depth only image - is colorattachment
 		  depthImageResolve_[1] = vku::DepthImage(device, uint32_t(downResFrameBufferSz.x), uint32_t(downResFrameBufferSz.y), transientCommandPool, graphicsQueue_, false, true);  // depth only image - is storage
 		  stencilCheckerboard_[0] = vku::StencilAttachmentImage(device, uint32_t(downResFrameBufferSz.x), uint32_t(downResFrameBufferSz.y), transientCommandPool, graphicsQueue_);
@@ -1226,7 +1231,17 @@ public:
 		  rpm.attachmentInitialLayout(vk::ImageLayout::eUndefined);
 		  rpm.attachmentFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);
 
-		  // The resolved second colour attachment.				     // 3
+		  // The third colour attachment.				     		// 3
+		  rpm.attachmentBegin(normalImage_.multisampled.format());
+		  rpm.attachmentSamples(vku::DefaultSampleCount);
+		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eClear);
+		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eDontCare);		// not required to store - multisampled image is fully transient for this *renderpass*
+		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
+		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
+		  rpm.attachmentInitialLayout(vk::ImageLayout::eUndefined);
+		  rpm.attachmentFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);
+
+		  // The resolved second colour attachment.				     // 4
 		  rpm.attachmentBegin(mouseImage_.resolved.format());
 		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);
 		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eDontCare);
@@ -1236,18 +1251,30 @@ public:
 		  rpm.attachmentInitialLayout(vk::ImageLayout::eUndefined);
 		  rpm.attachmentFinalLayout(vk::ImageLayout::eTransferSrcOptimal);
 
+		  // The resolved third colour attachment.				     // 5
+		  rpm.attachmentBegin(normalImage_.resolved.format());
+		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);
+		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eDontCare);
+		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eStore);				// store required for resolved image
+		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
+		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
+		  rpm.attachmentInitialLayout(vk::ImageLayout::eUndefined);
+		  rpm.attachmentFinalLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+
 		  // A subpass to render using the above attachment
 		  rpm.subpassBegin(vk::PipelineBindPoint::eGraphics);
 		  rpm.subpassDepthStencilAttachment(vk::ImageLayout::eDepthStencilAttachmentOptimal, 0);	// optimal format (read/write) during subpass
 		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 1);
 		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 2);
-		  rpm.subpassResolveSkipAttachment(); // skip over 1st color attachment, only resolving mouse image:
-		  rpm.subpassResolveAttachment(vk::ImageLayout::eColorAttachmentOptimal, 3);
+		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 3);
+		  rpm.subpassResolveSkipAttachment(); // skip over 1st color attachment, only resolving mouse image & normal image:
+		  rpm.subpassResolveAttachment(vk::ImageLayout::eColorAttachmentOptimal, 4);
+		  rpm.subpassResolveAttachment(vk::ImageLayout::eColorAttachmentOptimal, 5);
 
 		  // **** SUBPASS 1 - Depth buffer custom resolve //
 
 		  // The depth/stencil attachment.
-		  rpm.attachmentBegin(depthImage_.format());		// 4
+		  rpm.attachmentBegin(depthImage_.format());		// 6
 		  rpm.attachmentSamples(vku::DefaultSampleCount);
 		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eLoad);
 		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eDontCare); // read only access
@@ -1257,7 +1284,7 @@ public:
 		  rpm.attachmentFinalLayout(vk::ImageLayout::eDepthStencilReadOnlyOptimal);	// depth shall remain readonly for the rest of the frame
 
 		  // The only colour attachment.
-		  rpm.attachmentBegin(depthImageResolve_[0].format());		// 5
+		  rpm.attachmentBegin(depthImageResolve_[0].format());		// 7
 		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);
 		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eDontCare);
 		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eStore);
@@ -1268,8 +1295,8 @@ public:
 
 		  // A subpass to render using the above two attachments.
 		  rpm.subpassBegin(vk::PipelineBindPoint::eGraphics);
-		  rpm.subpassInputAttachment(vk::ImageLayout::eDepthStencilReadOnlyOptimal, 4);
-		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 5);
+		  rpm.subpassInputAttachment(vk::ImageLayout::eDepthStencilReadOnlyOptimal, 6);
+		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 7);
 	
 		  // A dependency to reset the layout of both attachments.
 		  rpm.dependencyBegin(VK_SUBPASS_EXTERNAL, 0);
@@ -1331,6 +1358,14 @@ public:
 		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eTransferRead);
 		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
 
+		  // normal resolve
+		  rpm.dependencyBegin(0, VK_SUBPASS_EXTERNAL);
+		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eFragmentShader);
+		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eColorAttachmentRead);
+		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eShaderRead);
+		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
+
 		  // Use the maker object to construct the vulkan object
 		  zPass_ = rpm.createUnique(device);
 
@@ -1339,7 +1374,8 @@ public:
 
 	  framebuffers_[eFrameBuffers::DEPTH] = new vk::UniqueFramebuffer[double_buffer_count];
 	  for (int i = 0; i != double_buffer_count; ++i) {
-		  vk::ImageView const attachments[6] = { depthImage_.imageView()/*cleared*/, colorImage_.imageView()/*cleared*/, mouseImage_.multisampled.imageView()/*cleared*/, mouseImage_.resolved.imageView(),
+		  vk::ImageView const attachments[8] = { depthImage_.imageView()/*cleared*/, colorImage_.imageView()/*cleared*/, mouseImage_.multisampled.imageView()/*cleared*/, normalImage_.multisampled.imageView()/*cleared*/, 
+			                                     mouseImage_.resolved.imageView(), normalImage_.resolved.imageView(),
 												 depthImage_.imageView(), depthImageResolve_[0].imageView()
 											   };
 		  vk::FramebufferCreateInfo const fbci{ {}, *zPass_, _countof(attachments), attachments, width_, height_, 1 };
@@ -2311,7 +2347,7 @@ public:
 
 	  // alpha channel ust atleast be cleared to 1 for transparency "clear masks"
 	  // it is faster to clear all channels to 1 or 0
-	  constinit static vk::ClearValue const clearArray_zPass[] = { vk::ClearDepthStencilValue{1.0f, 0}, vk::ClearColorValue{ std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}}, vk::ClearColorValue{ std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}},  {}, {}, {}, {} };
+	  constinit static vk::ClearValue const clearArray_zPass[] = { vk::ClearDepthStencilValue{1.0f, 0}, vk::ClearColorValue{ std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}}, vk::ClearColorValue{ std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}}, vk::ClearColorValue{ std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}}, {}, {}, {}, {} };
 	  constinit static vk::ClearValue const clear_offscreenPass{ vk::ClearColorValue{ std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}} };  // require opaque alpha, no alpha component writes in voxel shader due to clear masks
 	  
 	  point2D const frameBufferSz(width_, height_);
@@ -2934,6 +2970,8 @@ public:
   vk::ImageView const guiImageView() const { return(guiImage_.resolved.imageView()); }
   vk::ImageView const lastColorImageView(uint32_t const index) const { return(lastColorImage_[index].imageView()); }   //   0 - for opaques (used by transparency)   1 - for opaques & transparency (used by PostAA)   2 - for anti-aliased last frame (used by temporal AA)
 
+  vk::ImageView const normalImageView() const { return(normalImage_.resolved.imageView()); }
+
   vk::ImageView const colorVolumetricDownResCheckeredImageView() const { return(colorVolumetricImage_.checkered.imageView()); }
   vk::ImageView const colorVolumetricDownResImageView() const { return(colorVolumetricImage_.resolved.imageView()); }
   vk::ImageView const colorVolumetricImageView() const { return(colorVolumetricImage_.upsampled.imageView()); }
@@ -3045,6 +3083,11 @@ private:
 	  vku::ColorAttachmentImage		multisampled;			
 	  vku::ColorAttachmentImage		resolved;			
   } mouseImage_;
+
+  struct {
+	  vku::ColorAttachmentImage		multisampled;
+	  vku::ColorAttachmentImage		resolved;
+  } normalImage_;
 
   struct {
 	  vku::TextureImageStorage2D	checkered;			// half-resolution

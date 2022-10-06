@@ -3389,7 +3389,7 @@ public:
 	// vk::ImageUsageFlagBits::eTransferDst (if image is a destination for a transfer/copy to/clear image operation)
 	// TextureImageStorage3D is specific for compute shaders
 	// and the Image Usage should be specific aswell to optimize access to image resource
-	TextureImageStorage3D(vk::ImageUsageFlags const ImageUsage, vk::Device device, uint32_t width, uint32_t height, uint32_t depth, uint32_t mipLevels = 1U, vk::Format format = vk::Format::eB8G8R8A8Unorm, bool hostImage = false, bool const bDedicatedMemory = false) {
+	TextureImageStorage3D(vk::ImageUsageFlags const ImageUsage, vk::Device device, uint32_t const width, uint32_t const height, uint32_t const depth, uint32_t const mipLevels = 1U, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false, bool const bDedicatedMemory = false) {
 		vk::ImageCreateInfo info;
 		info.flags = {};
 		info.imageType = vk::ImageType::e3D;
@@ -3415,7 +3415,7 @@ public:
   TextureImageCube() {
   }
 
-  TextureImageCube(vk::Device device, uint32_t width, uint32_t height, uint32_t mipLevels=1, vk::Format format = vk::Format::eB8G8R8A8Unorm, bool hostImage = false) {
+  TextureImageCube(vk::Device device, uint32_t const width, uint32_t const height, uint32_t const mipLevels=1, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false) {
     vk::ImageCreateInfo info;
     info.flags = {vk::ImageCreateFlagBits::eCubeCompatible};
     info.imageType = vk::ImageType::e2D;
@@ -3688,7 +3688,6 @@ STATIC_INLINE_PURE vk::Format const GLtoVKFormat(uint32_t const glFormat) {
 
 
 /// Layout of a KTX file in a buffer.
-template<bool const WorkaroundLayerSizeDoubledInFileBug = false>
 class KTXFileLayout {
 public:
   KTXFileLayout() {
@@ -3746,9 +3745,12 @@ public:
 
 		// bugfix for arraylayers and faces not being factored into final size for this mip
         uint32_t layerImageSize;
-        if constexpr (WorkaroundLayerSizeDoubledInFileBug) {  // KTX ImageViewer export array texture doubles layer size written to file, sometimes...
+        if (header.numberOfArrayElements > 1) { // avoid div by zero
             layerImageSize = *(uint32_t*)(p) / header.numberOfArrayElements;
         }
+		else if (header.numberOfFaces > 1) {
+			layerImageSize = *(uint32_t*)(p) / header.numberOfFaces;
+		}
         else {
             layerImageSize = *(uint32_t*)(p);
         }
@@ -3780,7 +3782,7 @@ public:
     ok_ = true;
   }
 
-  uint32_t offset(uint32_t mipLevel, uint32_t arrayLayer, uint32_t face) const {
+  uint32_t const offset(uint32_t const mipLevel, uint32_t const arrayLayer, uint32_t const face) const {
 
     return imageOffsets_[mipLevel] + (arrayLayer * header.numberOfFaces + face) * layerImageSizes_[mipLevel];
   }
@@ -3811,7 +3813,7 @@ public:
 	  // bugfix: sometimes the image size is greater than the actual binary size of the data, due to an "upgrade" in alignment
 	  // so source buffer must have the same size as the image being copied too. The copy into the source buffer only copies the actual size of data,
 	  // with the rest being zeroed out.
-	  vk::DeviceSize const alignedSize(std::max(image.size(), (vk::DeviceSize)totalActualSize));
+	  vk::DeviceSize const alignedSize(SFM::roundToMultipleOf<true>(std::max(image.size(), (vk::DeviceSize)totalActualSize), 16));
 
 	vku::GenericBuffer stagingBuffer((vk::BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc, alignedSize, vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible, VMA_MEMORY_USAGE_AUTO_PREFER_HOST, vku::eMappedAccess::Sequential);
     
@@ -3822,11 +3824,13 @@ public:
     vku::executeImmediately<false>(device, commandPool, queue, [&](vk::CommandBuffer cb) {
       vk::Buffer buf = stagingBuffer.buffer();
       for (uint32_t mipLevel = 0; mipLevel != mipLevels(); ++mipLevel) {
-        auto width = this->width(mipLevel); 
-        auto height = this->height(mipLevel); 
-        auto depth = this->depth(mipLevel); 
-        for (uint32_t face = 0; face != arrayLayers(); ++face) {
-          image.copy(cb, buf, mipLevel, face, width, height, depth, (offset(mipLevel, face, 0) - baseOffset));
+        auto const width = this->width(mipLevel); 
+        auto const height = this->height(mipLevel); 
+        auto const depth = this->depth(mipLevel); 
+        for (uint32_t layer = 0; layer != arrayLayers(); ++layer) {
+			for (uint32_t face = 0; face != faces(); ++face) {
+				image.copy(cb, buf, mipLevel, layer, width, height, depth, SFM::roundToMultipleOf<true>((offset(mipLevel, layer, face) - baseOffset), 16));
+			}
         }
       }
     });
