@@ -66,10 +66,10 @@ namespace vku {
 
 	/* These constants are defined in vku_addon.hpp */ // vku.hpp line ~1550 for debuging when these constants are exceeded
 	static constexpr uint32_t const // **even numbers only**
-		MAX_NUM_DESCRIPTOR_SETS = 25,
+		MAX_NUM_DESCRIPTOR_SETS = 32,
 		MAX_NUM_UNIFORM_BUFFERS = 8,
 		MAX_NUM_IMAGES = 144,
-		MAX_NUM_STORAGE_BUFFERS = 25,
+		MAX_NUM_STORAGE_BUFFERS = 32,
 		MAX_NUM_BUFFER_VIEWS = 2;
 
 	static constexpr int32_t const

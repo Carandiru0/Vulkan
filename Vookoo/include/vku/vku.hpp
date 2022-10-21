@@ -178,8 +178,8 @@ static inline void memory_barrier(vk::CommandBuffer& cb, vk::PipelineStageFlags 
 }
 
 /// Scale a value by mip level, but do not reduce to zero.
-inline uint32_t mipScale(uint32_t value, uint32_t mipLevel) {
-  return std::max(value >> mipLevel, (uint32_t)1);
+inline uint32_t const mipScale(uint32_t const value, uint32_t const mipLevel) {
+  return( std::max(value >> mipLevel, 1u) );
 }
 
 /// Load a binary file into a vector.
@@ -335,7 +335,7 @@ inline BlockParams getBlockParams(vk::Format format) {
     case vk::Format::eS8Uint: return BlockParams{1, 1, 1};
     case vk::Format::eD16UnormS8Uint: return BlockParams{1, 1, 3};
     case vk::Format::eD24UnormS8Uint: return BlockParams{1, 1, 4};
-    case vk::Format::eD32SfloatS8Uint: return BlockParams{0, 0, 0};
+    case vk::Format::eD32SfloatS8Uint: return BlockParams{1, 1, 5};
     case vk::Format::eBc1RgbUnormBlock: return BlockParams{4, 4, 8};
     case vk::Format::eBc1RgbSrgbBlock: return BlockParams{4, 4, 8};
     case vk::Format::eBc1RgbaUnormBlock: return BlockParams{4, 4, 8};
@@ -348,58 +348,12 @@ inline BlockParams getBlockParams(vk::Format format) {
     case vk::Format::eBc4SnormBlock: return BlockParams{4, 4, 16};
     case vk::Format::eBc5UnormBlock: return BlockParams{4, 4, 16};
     case vk::Format::eBc5SnormBlock: return BlockParams{4, 4, 16};
-    case vk::Format::eBc6HUfloatBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eBc6HSfloatBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eBc7UnormBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eBc7SrgbBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eEtc2R8G8B8UnormBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eEtc2R8G8B8SrgbBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eEtc2R8G8B8A1UnormBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eEtc2R8G8B8A1SrgbBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eEtc2R8G8B8A8UnormBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eEtc2R8G8B8A8SrgbBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eEacR11UnormBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eEacR11SnormBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eEacR11G11UnormBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eEacR11G11SnormBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc4x4UnormBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc4x4SrgbBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc5x4UnormBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc5x4SrgbBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc5x5UnormBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc5x5SrgbBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc6x5UnormBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc6x5SrgbBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc6x6UnormBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc6x6SrgbBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc8x5UnormBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc8x5SrgbBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc8x6UnormBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc8x6SrgbBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc8x8UnormBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc8x8SrgbBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc10x5UnormBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc10x5SrgbBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc10x6UnormBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc10x6SrgbBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc10x8UnormBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc10x8SrgbBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc10x10UnormBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc10x10SrgbBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc12x10UnormBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc12x10SrgbBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc12x12UnormBlock: return BlockParams{0, 0, 0};
-    case vk::Format::eAstc12x12SrgbBlock: return BlockParams{0, 0, 0};
-    case vk::Format::ePvrtc12BppUnormBlockIMG: return BlockParams{0, 0, 0};
-    case vk::Format::ePvrtc14BppUnormBlockIMG: return BlockParams{0, 0, 0};
-    case vk::Format::ePvrtc22BppUnormBlockIMG: return BlockParams{0, 0, 0};
-    case vk::Format::ePvrtc24BppUnormBlockIMG: return BlockParams{0, 0, 0};
-    case vk::Format::ePvrtc12BppSrgbBlockIMG: return BlockParams{0, 0, 0};
-    case vk::Format::ePvrtc14BppSrgbBlockIMG: return BlockParams{0, 0, 0};
-    case vk::Format::ePvrtc22BppSrgbBlockIMG: return BlockParams{0, 0, 0};
-    case vk::Format::ePvrtc24BppSrgbBlockIMG: return BlockParams{0, 0, 0};
+    case vk::Format::eBc6HUfloatBlock: return BlockParams{4, 4, 16};
+    case vk::Format::eBc6HSfloatBlock: return BlockParams{4, 4, 16};
+    case vk::Format::eBc7UnormBlock: return BlockParams{4, 4, 16};
+    case vk::Format::eBc7SrgbBlock: return BlockParams{4, 4, 16};
   }
-  return BlockParams{0, 0, 0};
+  return BlockParams{1, 1, 1};
 }
 
 /// Factory for instances.
@@ -942,7 +896,7 @@ public:
   void dependencyDstAccessMask(vk::AccessFlags const value) { s.subpassDependencies.back().dstAccessMask = value; };
   void dependencyDependencyFlags(vk::DependencyFlags const value) { s.subpassDependencies.back().dependencyFlags = value; };
 private:
-  constexpr static int const max_refs = 16;
+  constexpr static int const max_refs = 16; /*do not change */
 
   vk::AttachmentReference *getAttachmentReference() {
     return (s.num_refs < max_refs) ? &s.attachmentReferences[s.num_refs++] : nullptr;
@@ -1665,15 +1619,12 @@ public:
 	  if (0 == size)
 		  return;
 
-	  {
+	  if (0 != firstactivesizebytes) {
 		  vk::BufferCopy const bc{ 0, 0, firstactivesizebytes };
 		  cb.copyBuffer(stagingBuffer.buffer(), buffer_, bc);
 	  }
 
-	  if (0 == secondactivesizebytes)
-		  return;
-
-	  {
+	  if (0 != secondactivesizebytes) {
 		  vk::BufferCopy const bc{ 0, firstactivesizebytes, secondactivesizebytes };
 		  cb.copyBuffer(stagingBufferAppended.buffer(), buffer_, bc);
 	  }
@@ -1888,6 +1839,7 @@ public:
 
 	~DynamicVertexBuffer()
 	{
+		GenericBuffer::~GenericBuffer();
 		SAFE_DELETE_ARRAY(partition_);
 	}
 
@@ -2064,6 +2016,7 @@ private:
 public:
 	~UniformTexelBuffer()
 	{
+		GenericBuffer::~GenericBuffer();
 		bufferView_.release();
 	}
 };
@@ -2417,7 +2370,7 @@ public:
   }
 
   /// Copy a subimage in a buffer to this image.
-  void copy(vk::CommandBuffer& __restrict cb, vk::Buffer const& __restrict  buffer, uint32_t const mipLevel, uint32_t const arrayLayer, uint32_t const width, uint32_t const height, uint32_t const depth, uint32_t const offset) { 
+  void copy(vk::CommandBuffer& __restrict cb, vk::Buffer const& __restrict  buffer, uint32_t const mipLevel, uint32_t const arrayLayer, uint32_t const width, uint32_t const height, uint32_t const depth, size_t const offset) { 
     setLayout(cb, vk::ImageLayout::eTransferDstOptimal);
     vk::BufferImageCopy region{};
     region.bufferOffset = offset;
@@ -3109,16 +3062,19 @@ protected:
 		
 	void release()
 	{
-		size = 0;
-		for (auto& mip : mipView) {
-			mip.release();
-		}
-		imageView.release();
+		if (0 != size) { // only release once
+			size = 0;
 
-		if (allocation) {
-			vmaDestroyImage(vma_, image, allocation);
-			image = nullptr;
-			allocation = nullptr;
+			for (auto& mip : mipView) {
+				mip.release();
+			}
+			imageView.release();
+
+			if (allocation) {
+				vmaDestroyImage(vma_, image, allocation);
+				image = nullptr;
+				allocation = nullptr;
+			}
 		}
 	}
 
@@ -3605,7 +3561,7 @@ public:
     s.info.compareEnable = 0;
     s.info.compareOp = vk::CompareOp::eAlways;
     s.info.minLod = 0;
-    s.info.maxLod = 5.0f;
+    s.info.maxLod = 13.0f; // default supporting up to 13 mipmap levels
     s.info.borderColor = vk::BorderColor{};
     s.info.unnormalizedCoordinates = 0;
   }
@@ -3744,16 +3700,17 @@ public:
     for (uint32_t mipLevel = 0; mipLevel != header.numberOfMipmapLevels; ++mipLevel) {
 
 		// bugfix for arraylayers and faces not being factored into final size for this mip
-        uint32_t layerImageSize;
-        if (header.numberOfArrayElements > 1) { // avoid div by zero
-            layerImageSize = *(uint32_t*)(p) / header.numberOfArrayElements;
-        }
-		else if (header.numberOfFaces > 1) {
-			layerImageSize = *(uint32_t*)(p) / header.numberOfFaces;
+		uint32_t layerImageSize;
+		if (header.numberOfArrayElements > 1) { // avoid div by zero
+			layerImageSize = *(uint32_t*)(p) / header.numberOfArrayElements;
 		}
-        else {
-            layerImageSize = *(uint32_t*)(p);
-        }
+		else if (header.numberOfFaces > 1) {
+			header.numberOfArrayElements = header.numberOfFaces; header.numberOfFaces = 1;
+			layerImageSize = *(uint32_t*)(p) / header.numberOfArrayElements;
+		}
+		else {
+			layerImageSize = *(uint32_t*)(p);
+		}
 
 	  layerImageSize = (layerImageSize + 3) & ~3;
 	  if (KTX_ENDIAN_REF != header.endianness) swap(layerImageSize);
@@ -3795,12 +3752,11 @@ public:
   vk::Format format() const { return format_; }
   uint32_t mipLevels() const { return header.numberOfMipmapLevels; }
   uint32_t arrayLayers() const { return header.numberOfArrayElements; }
-  uint32_t faces() const { return header.numberOfFaces; }
   uint32_t width(uint32_t mipLevel) const { return mipScale(header.pixelWidth, mipLevel); }
   uint32_t height(uint32_t mipLevel) const { return mipScale(header.pixelHeight, mipLevel); }
   uint32_t depth(uint32_t mipLevel) const { return mipScale(header.pixelDepth, mipLevel); }
 
-  void upload(vk::Device device, vku::GenericImage & __restrict image, uint8_t const* const __restrict pFileBegin, vk::CommandPool commandPool, vk::Queue queue) const {
+  void upload(vk::Device device, vku::GenericImage & __restrict image, uint8_t const* const __restrict pFileBegin, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue) const {
 	  uint32_t totalActualSize(0);
 
 	  for (auto const& size : imageSizes_) {
@@ -3810,30 +3766,30 @@ public:
 	  if (0 == totalActualSize)
 		  return;
 
+	  auto const bp = getBlockParams(format());
+
 	  // bugfix: sometimes the image size is greater than the actual binary size of the data, due to an "upgrade" in alignment
 	  // so source buffer must have the same size as the image being copied too. The copy into the source buffer only copies the actual size of data,
 	  // with the rest being zeroed out.
-	  vk::DeviceSize const alignedSize(SFM::roundToMultipleOf<true>(std::max(image.size(), (vk::DeviceSize)totalActualSize), 16));
+	  vk::DeviceSize const alignedSize((uint64_t)SFM::roundToMultipleOf<true>((int64_t)std::max(image.size(), (vk::DeviceSize)totalActualSize), (int64_t)bp.bytesPerBlock));
 
-	vku::GenericBuffer stagingBuffer((vk::BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc, alignedSize, vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible, VMA_MEMORY_USAGE_AUTO_PREFER_HOST, vku::eMappedAccess::Sequential);
-    
-	uint32_t const baseOffset = offset(0, 0, 0);
-	stagingBuffer.updateLocal(pFileBegin + baseOffset, totalActualSize);
+	  vku::GenericBuffer stagingBuffer((vk::BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc, alignedSize, vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible, VMA_MEMORY_USAGE_AUTO_PREFER_HOST, vku::eMappedAccess::Sequential);
 
-    // Copy the staging buffer to the GPU texture and set the layout.
-    vku::executeImmediately<false>(device, commandPool, queue, [&](vk::CommandBuffer cb) {
-      vk::Buffer buf = stagingBuffer.buffer();
-      for (uint32_t mipLevel = 0; mipLevel != mipLevels(); ++mipLevel) {
-        auto const width = this->width(mipLevel); 
-        auto const height = this->height(mipLevel); 
-        auto const depth = this->depth(mipLevel); 
-        for (uint32_t layer = 0; layer != arrayLayers(); ++layer) {
-			for (uint32_t face = 0; face != faces(); ++face) {
-				image.copy(cb, buf, mipLevel, layer, width, height, depth, SFM::roundToMultipleOf<true>((offset(mipLevel, layer, face) - baseOffset), 16));
-			}
-        }
-      }
-    });
+	  uint32_t const baseOffset = offset(0, 0, 0);
+	  stagingBuffer.updateLocal(pFileBegin + baseOffset, totalActualSize);
+
+	  // Copy the staging buffer to the GPU texture and set the layout.
+	  vku::executeImmediately<false>(device, commandPool, queue, [&](vk::CommandBuffer cb) {
+		  vk::Buffer buf = stagingBuffer.buffer();
+		  for (uint32_t mipLevel = 0; mipLevel != mipLevels(); ++mipLevel) {
+			  auto const width = this->width(mipLevel);
+			  auto const height = this->height(mipLevel);
+			  auto const depth = this->depth(mipLevel);
+			  for (uint32_t layer = 0; layer != arrayLayers(); ++layer) {
+				  image.copy(cb, buf, mipLevel, layer, width, height, depth, (uint64_t)SFM::roundToMultipleOf<true>((int64_t)(offset(mipLevel, layer, 0) - baseOffset), (int64_t)bp.bytesPerBlock));
+			  }
+		  }
+	  });
   }
   void finalizeUpload(vk::Device const& __restrict device, vku::GenericImage& __restrict image, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue,
 	  vk::ImageLayout const FinalLayout = vk::ImageLayout::eShaderReadOnlyOptimal) const
