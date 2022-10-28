@@ -3621,11 +3621,19 @@ STATIC_INLINE_PURE vk::Format const GLtoVKFormat(uint32_t const glFormat) {
     case 0x8229: return vk::Format::eR8Unorm;
     case 0x1903: return vk::Format::eR8Unorm;
 
+	case 0x822A: return vk::Format::eR16Unorm;
+
 	case 0x822B: return vk::Format::eR8G8Unorm;
 	case 0x8227: return vk::Format::eR8G8Unorm;
 
+	case 0x822C: return vk::Format::eR16G16Unorm;
+
+	case 0x8054: return vk::Format::eR16G16B16Unorm; // Imaging does not implement anything higher than R16G16, however the texture data is loaded differently here in TextureBoy
+
     case 0x1907: return vk::Format::eR8G8B8Unorm; // GL_RGB
 	case 0x8C41: return vk::Format::eR8G8B8Srgb;  // GL_RGB
+
+	case 0x805B: return vk::Format::eR16G16B16A16Unorm;
 
 	case 0x8058: return vk::Format::eR8G8B8A8Unorm; // GL_RGBA
     case 0x1908: return vk::Format::eR8G8B8A8Unorm; // GL_RGBA
@@ -3635,6 +3643,9 @@ STATIC_INLINE_PURE vk::Format const GLtoVKFormat(uint32_t const glFormat) {
     case 0x83F1: return vk::Format::eBc1RgbaUnormBlock; // GL_COMPRESSED_RGBA_S3TC_DXT1_EXT
     case 0x83F2: return vk::Format::eBc3UnormBlock; // GL_COMPRESSED_RGBA_S3TC_DXT3_EXT
     case 0x83F3: return vk::Format::eBc5UnormBlock; // GL_COMPRESSED_RGBA_S3TC_DXT5_EXT
+   
+	case 0x8E8E: return vk::Format::eBc6HSfloatBlock;	// COMPRESSED_RGB_BPTC_SIGNED_FLOAT_ARB
+	case 0x8E8F: return vk::Format::eBc6HUfloatBlock;	// COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_ARB         
 	case 0x8E8C: return vk::Format::eBc7UnormBlock;	// GL_COMPRESSED_RGBA_BPTC_UNORM_ARB
 	case 0x8E8D: return vk::Format::eBc7SrgbBlock;
   }
@@ -3643,118 +3654,181 @@ STATIC_INLINE_PURE vk::Format const GLtoVKFormat(uint32_t const glFormat) {
 
 
 
-/// Layout of a KTX file in a buffer.
+/// Layout of a KTX or KTX2 file in a buffer. - Unsupported KTX2 "super compression", always just the data in it's original format
+template<uint32_t const version = 1>  // KTX "1"  or  KTX "2"
 class KTXFileLayout {
+
+	enum KTX_VERSION
+	{
+		KTX1 = 1,
+		KTX2 = 2
+	};
+
 public:
-  KTXFileLayout() {
-  }
+  KTXFileLayout(uint8_t const* const __restrict begin, uint8_t const* const __restrict end)
+  {
+	  uint8_t const* p = begin;
 
-  KTXFileLayout(uint8_t const* const __restrict begin, uint8_t const* const __restrict end) {
-    uint8_t const * p = begin;
-    if (p + sizeof(Header) > end) return;
-    header = *(Header*)p;
-    static constexpr uint8_t magic[] = {
-      0xAB, 0x4B, 0x54, 0x58, 0x20, 0x31, 0x31, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A
-    };
-    
-    if (memcmp(magic, header.identifier, sizeof(magic))) {
-      return;
-    }
+	  if constexpr (KTX1 == version) {
+		  
+		  if (p + sizeof(Header) > end) return;
 
-	static constexpr uint32_t const KTX_ENDIAN_REF(0x04030201);
-    if (KTX_ENDIAN_REF != header.endianness) {
-      swap(header.glType);
-      swap(header.glTypeSize);
-      swap(header.glFormat);
-      swap(header.glInternalFormat);
-      swap(header.glBaseInternalFormat);
-      swap(header.pixelWidth);
-      swap(header.pixelHeight);
-      swap(header.pixelDepth);
-      swap(header.numberOfArrayElements);
-      swap(header.numberOfFaces);
-      swap(header.numberOfMipmapLevels);
-      swap(header.bytesOfKeyValueData);
-    }
+		  header_data.v1 = *(Header*)p;
 
-    header.numberOfArrayElements = std::max(1U, header.numberOfArrayElements);
-    header.numberOfFaces = std::max(1U, header.numberOfFaces);
-    header.numberOfMipmapLevels = std::max(1U, header.numberOfMipmapLevels);
-    header.pixelDepth = std::max(1U, header.pixelDepth);
+		  static constexpr uint8_t magic[] = {
+			0xAB, 0x4B, 0x54, 0x58, 0x20, 0x31, 0x31, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A // KTX1
+		  };
 
-    format_ = GLtoVKFormat(header.glInternalFormat);
-    if (format_ == vk::Format::eUndefined) return;
+		  if (memcmp(magic, header_data.v1.identifier, sizeof(magic))) {
+			  return;
+		  }
 
-    p += sizeof(Header);
-    if (p + header.bytesOfKeyValueData > end) return;
+		  static constexpr uint32_t const KTX_ENDIAN_REF(0x04030201);
+		  if (KTX_ENDIAN_REF != header_data.v1.endianness) {
+			  swap(header_data.v1.glType);
+			  swap(header_data.v1.glTypeSize);
+			  swap(header_data.v1.glFormat);
+			  swap(header_data.v1.glInternalFormat);
+			  swap(header_data.v1.glBaseInternalFormat);
+			  swap(header_data.v1.pixelWidth);
+			  swap(header_data.v1.pixelHeight);
+			  swap(header_data.v1.pixelDepth);
+			  swap(header_data.v1.numberOfArrayElements);
+			  swap(header_data.v1.numberOfFaces);
+			  swap(header_data.v1.numberOfMipmapLevels);
+			  swap(header_data.v1.bytesOfKeyValueData);
+		  }
 
-    for (uint32_t i = 0; i < header.bytesOfKeyValueData; ) {
-      uint32_t keyAndValueByteSize = *(uint32_t*)(p + i);
-      if (KTX_ENDIAN_REF != header.endianness) swap(keyAndValueByteSize);
-      std::string kv(p + i + 4, p + i + 4 + keyAndValueByteSize);
-      i += keyAndValueByteSize + 4;
-      i = (i + 3) & ~3;
-    }
+		  header_data.v1.numberOfArrayElements = std::max(1U, header_data.v1.numberOfArrayElements);
+		  header_data.v1.numberOfFaces = std::max(1U, header_data.v1.numberOfFaces);
+		  header_data.v1.numberOfMipmapLevels = std::max(1U, header_data.v1.numberOfMipmapLevels);
+		  header_data.v1.pixelDepth = std::max(1U, header_data.v1.pixelDepth);
 
-    p += header.bytesOfKeyValueData;
-    for (uint32_t mipLevel = 0; mipLevel != header.numberOfMipmapLevels; ++mipLevel) {
+		  format_ = GLtoVKFormat(header_data.v1.glInternalFormat);
+		  if (format_ == vk::Format::eUndefined) return;
 
-		// bugfix for arraylayers and faces not being factored into final size for this mip
-		uint32_t layerImageSize;
-		if (header.numberOfArrayElements > 1) { // avoid div by zero
-			layerImageSize = *(uint32_t*)(p) / header.numberOfArrayElements;
-		}
-		else if (header.numberOfFaces > 1) {
-			header.numberOfArrayElements = header.numberOfFaces; header.numberOfFaces = 1;
-			layerImageSize = *(uint32_t*)(p) / header.numberOfArrayElements;
-		}
-		else {
-			layerImageSize = *(uint32_t*)(p);
-		}
+		  p += sizeof(Header);
+		  if (p + header_data.v1.bytesOfKeyValueData > end) return;
+		  p += header_data.v1.bytesOfKeyValueData;
 
-	  layerImageSize = (layerImageSize + 3) & ~3;
-	  if (KTX_ENDIAN_REF != header.endianness) swap(layerImageSize);
+		  for (uint32_t mipLevel = 0; mipLevel != header_data.v1.numberOfMipmapLevels; ++mipLevel) {
 
-	  layerImageSizes_.push_back(layerImageSize);
-	  
-      uint32_t imageSize = layerImageSize * header.numberOfFaces * header.numberOfArrayElements;
+			  // bugfix for arraylayers and faces not being factored into final size for this mip
+			  uint32_t layerImageSize;
+			  if (header_data.v1.numberOfArrayElements > 1) { // avoid div by zero
+				  layerImageSize = *(uint32_t*)(p) / header_data.v1.numberOfArrayElements;
+			  }
+			  else if (header_data.v1.numberOfFaces > 1) {
+				  header_data.v1.numberOfArrayElements = header_data.v1.numberOfFaces; header_data.v1.numberOfFaces = 1;
+				  layerImageSize = *(uint32_t*)(p) / header_data.v1.numberOfArrayElements;
+			  }
+			  else {
+				  layerImageSize = *(uint32_t*)(p);
+			  }
 
-	  imageSize = (imageSize + 3) & ~3;
-	  if (KTX_ENDIAN_REF != header.endianness) swap(imageSize);
+			  layerImageSize = (layerImageSize + 3) & ~3;
+			  if (KTX_ENDIAN_REF != header_data.v1.endianness) swap(layerImageSize);
 
-	  imageSizes_.push_back(imageSize);
-	       
-      p += 4; // offset for reading layer imagesize above
-      imageOffsets_.push_back((uint32_t)(p - begin));
+			  layerImageSizes_.push_back(layerImageSize);
 
-      if (p + imageSize > end) {
-          // see https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glPixelStore.xhtml
-          // fix bugs... https://github.com/dariomanesku/cmft/issues/29
-          header.numberOfMipmapLevels = mipLevel + 1;
-          break;
-      }
-      p += imageSize; // next mip offset if there is one
-    }
+			  uint32_t imageSize = layerImageSize * header_data.v1.numberOfFaces * header_data.v1.numberOfArrayElements;
 
+			  imageSize = (imageSize + 3) & ~3;
+			  if (KTX_ENDIAN_REF != header_data.v1.endianness) swap(imageSize);
+
+			  imageSizes_.push_back(imageSize);
+
+			  p += 4; // offset for reading layer imagesize above
+			  imageOffsets_.push_back((uint32_t)(p - begin));
+
+			  if (p + imageSize > end) {
+				  // see https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glPixelStore.xhtml
+				  // fix bugs... https://github.com/dariomanesku/cmft/issues/29
+				  header_data.v1.numberOfMipmapLevels = mipLevel + 1;
+				  break;
+			  }
+			  p += imageSize; // next mip offset if there is one
+		  }
+	  }
+	  else {
+
+		  if (p + sizeof(HeaderV2) > end) return;
+
+		  header_data.v2 = *(HeaderV2*)p;
+
+		  static constexpr uint8_t magic[] = {
+			0xAB, 0x4B, 0x54, 0x58, 0x20, 0x32, 0x30, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A  // KTX2
+		  };
+
+		  if (memcmp(magic, header_data.v2.identifier, sizeof(magic))) {
+			  return;
+		  }
+
+		  header_data.v2.numberOfArrayElements = std::max(1U, header_data.v2.numberOfArrayElements);
+		  header_data.v2.numberOfFaces = std::max(1U, header_data.v2.numberOfFaces);
+		  header_data.v2.numberOfMipmapLevels = std::max(1U, header_data.v2.numberOfMipmapLevels);
+		  header_data.v2.pixelDepth = std::max(1U, header_data.v2.pixelDepth);
+
+		  format_ = (vk::Format)(header_data.v2.format);
+		  if (format_ == vk::Format::eUndefined) return;
+
+		  p += sizeof(HeaderV2);
+
+		  uint32_t imageOffset((uint32_t)(header_data.v2.sgdOffset + header_data.v2.sgdLength)); // ktx2 image data start offset
+
+		  for (uint32_t mipLevel = 0; mipLevel != header_data.v2.numberOfMipmapLevels; ++mipLevel) {
+
+			  p += 16; // skip byte offset & length, now on mip image image size
+
+			  // bugfix for arraylayers and faces not being factored into final size for this mip
+			  uint32_t layerImageSize;
+			  if (header_data.v2.numberOfArrayElements > 1) { // avoid div by zero
+				  layerImageSize = *(uint32_t*)(p) / header_data.v2.numberOfArrayElements;
+			  }
+			  else if (header_data.v2.numberOfFaces > 1) {
+				  header_data.v2.numberOfArrayElements = header_data.v2.numberOfFaces; header_data.v2.numberOfFaces = 1;
+				  layerImageSize = *(uint32_t*)(p) / header_data.v2.numberOfArrayElements;
+			  }
+			  else {
+				  layerImageSize = *(uint32_t*)(p);
+			  }
+
+			  layerImageSize = (layerImageSize + 3) & ~3;
+			  layerImageSizes_.push_back(layerImageSize);
+
+			  uint32_t imageSize = layerImageSize * header_data.v2.numberOfFaces * header_data.v2.numberOfArrayElements;
+
+			  imageSize = (imageSize + 3) & ~3;
+			  imageSizes_.push_back(imageSize);
+
+			  p += 8; // offset for reading layer imagesize above
+			  imageOffsets_.push_back(imageOffset); // relative to start of image data in ktx v2
+			  imageOffset += imageSize;
+		  }
+	  }
     ok_ = true;
   }
 
   uint32_t const offset(uint32_t const mipLevel, uint32_t const arrayLayer, uint32_t const face) const {
 
-    return imageOffsets_[mipLevel] + (arrayLayer * header.numberOfFaces + face) * layerImageSizes_[mipLevel];
+	  if constexpr (KTX2 == version) {
+		  return imageOffsets_[mipLevel] + (arrayLayer * header_data.v2.numberOfFaces + face) * layerImageSizes_[mipLevel];
+	  }
+
+      return imageOffsets_[mipLevel] + (arrayLayer * header_data.v1.numberOfFaces + face) * layerImageSizes_[mipLevel];
   }
 
-  uint32_t size(uint32_t mipLevel) {
+  uint32_t const size(uint32_t const mipLevel) {
     return imageSizes_[mipLevel];
   }
 
-  bool ok() const { return ok_; }
-  vk::Format format() const { return format_; }
-  uint32_t mipLevels() const { return header.numberOfMipmapLevels; }
-  uint32_t arrayLayers() const { return header.numberOfArrayElements; }
-  uint32_t width(uint32_t mipLevel) const { return mipScale(header.pixelWidth, mipLevel); }
-  uint32_t height(uint32_t mipLevel) const { return mipScale(header.pixelHeight, mipLevel); }
-  uint32_t depth(uint32_t mipLevel) const { return mipScale(header.pixelDepth, mipLevel); }
+  bool const ok() const { return ok_; }
+  vk::Format const format() const { return format_; }
+  uint32_t const mipLevels() const { if constexpr (KTX2 == version) return header_data.v2.numberOfMipmapLevels; return header_data.v1.numberOfMipmapLevels; }
+  uint32_t const arrayLayers() const { if constexpr (KTX2 == version) return header_data.v2.numberOfArrayElements; return header_data.v1.numberOfArrayElements; }
+  uint32_t const width(uint32_t const mipLevel) const { if constexpr (KTX2 == version) return mipScale(header_data.v2.pixelWidth, mipLevel); return mipScale(header_data.v1.pixelWidth, mipLevel); }
+  uint32_t const height(uint32_t const mipLevel) const { if constexpr (KTX2 == version) return mipScale(header_data.v2.pixelHeight, mipLevel); return mipScale(header_data.v1.pixelHeight, mipLevel); }
+  uint32_t const depth(uint32_t const mipLevel) const { if constexpr (KTX2 == version) return mipScale(header_data.v2.pixelDepth, mipLevel); return mipScale(header_data.v1.pixelDepth, mipLevel); }
 
   void upload(vk::Device device, vku::GenericImage & __restrict image, uint8_t const* const __restrict pFileBegin, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue) const {
 	  uint32_t totalActualSize(0);
@@ -3775,21 +3849,25 @@ public:
 
 	  vku::GenericBuffer stagingBuffer((vk::BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc, alignedSize, vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible, VMA_MEMORY_USAGE_AUTO_PREFER_HOST, vku::eMappedAccess::Sequential);
 
-	  uint32_t const baseOffset = offset(0, 0, 0);
+	  uint32_t const baseOffset(offset(0, 0, 0));
+
+	  // now loading file data to stagingbuffer
 	  stagingBuffer.updateLocal(pFileBegin + baseOffset, totalActualSize);
 
-	  // Copy the staging buffer to the GPU texture and set the layout.
-	  vku::executeImmediately<false>(device, commandPool, queue, [&](vk::CommandBuffer cb) {
-		  vk::Buffer buf = stagingBuffer.buffer();
-		  for (uint32_t mipLevel = 0; mipLevel != mipLevels(); ++mipLevel) {
-			  auto const width = this->width(mipLevel);
-			  auto const height = this->height(mipLevel);
-			  auto const depth = this->depth(mipLevel);
-			  for (uint32_t layer = 0; layer != arrayLayers(); ++layer) {
-				  image.copy(cb, buf, mipLevel, layer, width, height, depth, (uint64_t)SFM::roundToMultipleOf<true>((int64_t)(offset(mipLevel, layer, 0) - baseOffset), (int64_t)bp.bytesPerBlock));
+	  // now loading stagingbuffer to image
+
+		  // Copy the staging buffer to the GPU texture and set the layout.
+		  vku::executeImmediately<false>(device, commandPool, queue, [&](vk::CommandBuffer cb) {
+			  vk::Buffer buf = stagingBuffer.buffer();
+			  for (uint32_t mipLevel = 0; mipLevel != mipLevels(); ++mipLevel) {
+				  auto const width = this->width(mipLevel);
+				  auto const height = this->height(mipLevel);
+				  auto const depth = this->depth(mipLevel);
+				  for (uint32_t layer = 0; layer != arrayLayers(); ++layer) {
+					  image.copy(cb, buf, mipLevel, layer, width, height, depth, (uint64_t)SFM::roundToMultipleOf<true>((int64_t)(offset(mipLevel, layer, 0) - baseOffset), (int64_t)bp.bytesPerBlock));
+				  }
 			  }
-		  }
-	  });
+			  });
   }
   void finalizeUpload(vk::Device const& __restrict device, vku::GenericImage& __restrict image, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue,
 	  vk::ImageLayout const FinalLayout = vk::ImageLayout::eShaderReadOnlyOptimal) const
@@ -3823,8 +3901,31 @@ private:
     uint32_t bytesOfKeyValueData;
   };
 
-  Header header;
-  vk::Format format_;
+  struct HeaderV2 {
+	  uint8_t identifier[12];
+	  uint32_t format;
+	  uint32_t typeSize;
+	  uint32_t pixelWidth;
+	  uint32_t pixelHeight;
+	  uint32_t pixelDepth;
+	  uint32_t numberOfArrayElements; // layer count / number of array elements
+	  uint32_t numberOfFaces;
+	  uint32_t numberOfMipmapLevels;
+	  uint32_t supercompressionScheme;
+	  uint32_t dfdOffset; 
+	  uint32_t dfdLength;
+	  uint32_t kvdOffset;
+	  uint32_t kvdLength;
+	  uint64_t sgdOffset;
+	  uint64_t sgdLength;
+  };
+
+  struct {
+	  Header   v1{};
+	  HeaderV2 v2{};
+  } header_data{};
+
+  vk::Format format_{};
   bool ok_ = false;
   std::vector<uint32_t> imageOffsets_;
   std::vector<uint32_t> imageSizes_;
