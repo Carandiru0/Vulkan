@@ -68,7 +68,7 @@ namespace vku {
 	static constexpr uint32_t const // **even numbers only**
 		MAX_NUM_DESCRIPTOR_SETS = 32,
 		MAX_NUM_UNIFORM_BUFFERS = 8,
-		MAX_NUM_IMAGES = 144,
+		MAX_NUM_IMAGES = 250,
 		MAX_NUM_STORAGE_BUFFERS = 32,
 		MAX_NUM_BUFFER_VIEWS = 2;
 

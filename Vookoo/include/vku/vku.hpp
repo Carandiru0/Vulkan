@@ -3628,8 +3628,6 @@ STATIC_INLINE_PURE vk::Format const GLtoVKFormat(uint32_t const glFormat) {
 
 	case 0x822C: return vk::Format::eR16G16Unorm;
 
-	case 0x8054: return vk::Format::eR16G16B16Unorm; // Imaging does not implement anything higher than R16G16, however the texture data is loaded differently here in TextureBoy
-
     case 0x1907: return vk::Format::eR8G8B8Unorm; // GL_RGB
 	case 0x8C41: return vk::Format::eR8G8B8Srgb;  // GL_RGB
 
