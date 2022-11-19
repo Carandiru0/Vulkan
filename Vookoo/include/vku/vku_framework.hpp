@@ -2587,25 +2587,49 @@ public:
 			  vk::Fence const cbFence{ clearDrawBuffers_.fence[0][imageIndex] }; // clear cb fence can safetly be omitted/ignored for this queue submission only requires one fence
 			  device.waitForFences(cbFence, VK_TRUE, umax);
 			  device.resetFences(cbFence);
-			
-			  async_long_task::enqueue<background_critical>(
-				  // non-blocking submit
-				  [=] {
-					  vk::CommandBuffer const cb{ *clearDrawBuffers_.cb[0][imageIndex] }; // previously written by setStaticClearCommands (above)
 
-					//----------//CLEAR SUBMIT // **waiting on nothing
+			  if (0 == imageIndex) { // required condition to resolve to template argument
 
-					  vk::SubmitInfo submit{};
-					  submit.waitSemaphoreCount = 0;
-					  submit.pWaitSemaphores = nullptr;
-					  submit.pWaitDstStageMask = 0;
-					  submit.commandBufferCount = 1;
-					  submit.pCommandBuffers = &cb;				// submitting presents' static cb
-					  submit.signalSemaphoreCount = 0;
-					  submit.pSignalSemaphores = nullptr;			// signalling commands complete
+				  async_long_task::enqueue<background_critical, 0>( // leverages unique lambda [0]
+					  // non-blocking submit
+					  [=] {
+						  vk::CommandBuffer const cb{ *clearDrawBuffers_.cb[0][imageIndex] }; // previously written by setStaticClearCommands (above)
 
-					  graphicsQueue_.submit(1, &submit, cbFence);
-				  });
+						  //----------//CLEAR SUBMIT // **waiting on nothing
+
+						  vk::SubmitInfo submit{};
+						  submit.waitSemaphoreCount = 0;
+						  submit.pWaitSemaphores = nullptr;
+						  submit.pWaitDstStageMask = 0;
+						  submit.commandBufferCount = 1;
+						  submit.pCommandBuffers = &cb;				// submitting presents' static cb
+						  submit.signalSemaphoreCount = 0;
+						  submit.pSignalSemaphores = nullptr;			// signalling commands complete
+
+						  graphicsQueue_.submit(1, &submit, cbFence);
+					  });
+			  }
+			  else {
+
+				  async_long_task::enqueue<background_critical, 1>( // leverages unique lambda [1]
+					  // non-blocking submit
+					  [=] {
+						  vk::CommandBuffer const cb{ *clearDrawBuffers_.cb[0][imageIndex] }; // previously written by setStaticClearCommands (above)
+
+						  //----------//CLEAR SUBMIT // **waiting on nothing
+
+						  vk::SubmitInfo submit{};
+						  submit.waitSemaphoreCount = 0;
+						  submit.pWaitSemaphores = nullptr;
+						  submit.pWaitDstStageMask = 0;
+						  submit.commandBufferCount = 1;
+						  submit.pCommandBuffers = &cb;				// submitting presents' static cb
+						  submit.signalSemaphoreCount = 0;
+						  submit.pSignalSemaphores = nullptr;			// signalling commands complete
+
+						  graphicsQueue_.submit(1, &submit, cbFence);
+					  });
+			  }
 		  }
 	  }
 
