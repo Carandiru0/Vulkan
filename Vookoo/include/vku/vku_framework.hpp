@@ -204,17 +204,19 @@ public:
 																							  // will have at least 2 queues for transfer
 		  uint32_t const granularity(qprop.minImageTransferGranularity.width + qprop.minImageTransferGranularity.height + qprop.minImageTransferGranularity.depth);
 
-		  if (granularity > lastGranularity) {
+		  if ((qprop.queueCount >= 2)) { // Enough queues? (simultaneous)
+			  if (granularity > lastGranularity) {
 
-			  // supporting only queues with:
-			  //
-			  // qprop.minImageTransferGranularity.width	= 1   or is divisable by 8
-			  // qprop.minImageTransferGranularity.height	= 1   or ""  ""   ""  by 8
-			  // qprop.minImageTransferGranularity.depth	= 1   or ""  ""   ""  by 8
+				  // supporting only queues with:
+				  //
+				  // qprop.minImageTransferGranularity.width	= 1   or is divisable by 8
+				  // qprop.minImageTransferGranularity.height	= 1   or ""  ""   ""  by 8
+				  // qprop.minImageTransferGranularity.depth	= 1   or ""  ""   ""  by 8
 
-			  if ((3 == granularity) || (0 == (granularity % 8))) {
-				  transferQueueFamilyIndex_ = qi;
-				  lastGranularity = granularity;
+				  if ((3 == granularity) || (0 == (granularity % 8))) {
+					  transferQueueFamilyIndex_ = qi;
+					  lastGranularity = granularity;
+				  }
 			  }
 		  }
 	  }
