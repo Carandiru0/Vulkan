@@ -2385,7 +2385,7 @@ public:
 
   // for a single layer upload, mipmapping levels not supported - only the source size for a layer of n bytes is considered. the target texture for upload must not have mipmaps, and should also enough layers (total layers > targetLayer)
   template< bool const DoSetFinalLayout = true, vk::ImageLayout const FinalLayout = vk::ImageLayout::eShaderReadOnlyOptimal, typename T >
-  void upload(vk::Device device, T const* const __restrict bytes, size_t const sizeLayer, uint32_t const targetLayer, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue) {
+  void upload(vk::Device const& __restrict device, T const* const __restrict bytes, size_t const sizeLayer, uint32_t const targetLayer, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue) {
 	  vku::GenericBuffer stagingBuffer((vk::BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc, (vk::DeviceSize)sizeLayer, vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible, VMA_MEMORY_USAGE_AUTO_PREFER_HOST, vku::eMappedAccess::Sequential);
 	  stagingBuffer.updateLocal<T>(bytes, sizeLayer);
 
@@ -2409,7 +2409,7 @@ public:
 
   // for a single layer upload, mipmapping levels not supported - only the source size for a layer of n bytes is considered. the target texture for upload must not have mipmaps, and should also enough layers (total layers > targetLayer)
   template< bool const DoSetFinalLayout = true, vk::ImageLayout const FinalLayout = vk::ImageLayout::eShaderReadOnlyOptimal >
-  void upload(vk::Device device, vku::GenericBuffer const& __restrict stagingBuffer, uint32_t const targetLayer, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue) {
+  void upload(vk::Device const& __restrict device, vku::GenericBuffer const& __restrict stagingBuffer, uint32_t const targetLayer, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue) {
 
 	  // Copy the staging buffer to the GPU texture and set the layout.
 	  vku::executeImmediately(device, commandPool, queue, [&](vk::CommandBuffer cb) {
@@ -2430,7 +2430,7 @@ public:
   }
 
   template< bool const DoSetFinalLayout = true, vk::ImageLayout const FinalLayout = vk::ImageLayout::eShaderReadOnlyOptimal, typename T >
-  void upload(vk::Device device, T const* const __restrict bytes, size_t const size, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue) {
+  void upload(vk::Device const& __restrict device, T const* const __restrict bytes, size_t const size, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue) {
 	  vku::GenericBuffer stagingBuffer((vk::BufferUsageFlags)vk::BufferUsageFlagBits::eTransferSrc, (vk::DeviceSize)size, vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible, VMA_MEMORY_USAGE_AUTO_PREFER_HOST, vku::eMappedAccess::Sequential);
 	  stagingBuffer.updateLocal<T>(bytes, size);
 
@@ -2504,7 +2504,7 @@ public:
   }
 
   template< bool const DoSetFinalLayout = true, vk::ImageLayout const FinalLayout = vk::ImageLayout::eShaderReadOnlyOptimal >
-  void upload(vk::Device device, std::vector<uint8_t> &bytes, vk::CommandPool commandPool, vk::Queue queue) {
+  void upload(vk::Device const& __restrict device, std::vector<uint8_t> &bytes, vk::CommandPool commandPool, vk::Queue queue) {
 	  upload< DoSetFinalLayout, FinalLayout >(device, bytes.data(), bytes.size(), commandPool, queue);
   }
 
@@ -3114,7 +3114,7 @@ public:
 	}
 
 	// For Immutable Simple 1D Texture Array resource
-	TextureImage1DArray(vk::Device device, uint32_t const width, uint32_t const layers, vk::Format format = vk::Format::eB8G8R8A8Unorm, bool hostImage = false, bool const bDedicatedMemory = false) {
+	TextureImage1DArray(vk::Device const& __restrict device, uint32_t const width, uint32_t const layers, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false, bool const bDedicatedMemory = false) {
 		vk::ImageCreateInfo info;
 		info.flags = {};
 		info.imageType = vk::ImageType::e1D;
@@ -3141,13 +3141,13 @@ public:
 	}
 
 	// For Immutable Simple 2D Texture Array resource
-	TextureImage2DArray(vk::Device device, uint32_t const width, uint32_t const height, uint32_t const layers, vk::Format format = vk::Format::eB8G8R8A8Unorm, bool hostImage = false, bool const bDedicatedMemory = false) {
+	TextureImage2DArray(vk::Device const& __restrict device, uint32_t const width, uint32_t const height, uint32_t const layers, uint32_t const mipLevels = 1, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false, bool const bDedicatedMemory = false) {
 		vk::ImageCreateInfo info;
 		info.flags = {};
 		info.imageType = vk::ImageType::e2D;
 		info.format = format;
 		info.extent = vk::Extent3D{ width, height, 1U };
-		info.mipLevels = 1;
+		info.mipLevels = mipLevels;
 		info.arrayLayers = layers;
 		info.samples = vk::SampleCountFlagBits::e1;
 		info.tiling = hostImage ? vk::ImageTiling::eLinear : vk::ImageTiling::eOptimal;
@@ -3168,7 +3168,7 @@ public:
     }
 
     // For Immutable Simple 2D Texture resource
-    TextureImage1D(vk::Device device, uint32_t const width, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false, bool const bDedicatedMemory = false) {
+    TextureImage1D(vk::Device const& __restrict device, uint32_t const width, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false, bool const bDedicatedMemory = false) {
         vk::ImageCreateInfo info;
         info.flags = {};
         info.imageType = vk::ImageType::e1D;
@@ -3186,10 +3186,10 @@ public:
         create(device, info, vk::ImageViewType::e1D, vk::ImageAspectFlagBits::eColor, hostImage, bDedicatedMemory);
     }
 
-    TextureImage1D(vk::Device device, uint32_t const width, uint32_t const mipLevels = 1, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false, bool const bDedicatedMemory = false) {
+    TextureImage1D(vk::Device const& __restrict device, uint32_t const width, uint32_t const mipLevels = 1, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false, bool const bDedicatedMemory = false) {
         vk::ImageCreateInfo info;
         info.flags = {};
-        info.imageType = vk::ImageType::e2D;
+        info.imageType = vk::ImageType::e1D;
         info.format = format;
         info.extent = vk::Extent3D{ width, 1U, 1U };
         info.mipLevels = mipLevels;
@@ -3260,13 +3260,13 @@ public:
 	}
 
 	// For Immutable Simple 3D Texture resource
-	TextureImage3D(vk::Device const& __restrict device, uint32_t const width, uint32_t const height, uint32_t const depth, vk::Format format = vk::Format::eB8G8R8A8Unorm, bool hostImage = false, bool const bDedicatedMemory = false) {
+	TextureImage3D(vk::Device const& __restrict device, uint32_t const width, uint32_t const height, uint32_t const depth, uint32_t const mipLevels = 1, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false, bool const bDedicatedMemory = false) {
 		vk::ImageCreateInfo info;
 		info.flags = {};
 		info.imageType = vk::ImageType::e3D;
 		info.format = format;
 		info.extent = vk::Extent3D{ width, height, depth };
-		info.mipLevels = 1;
+		info.mipLevels = mipLevels;
 		info.arrayLayers = 1;
 		info.samples = vk::SampleCountFlagBits::e1;
 		info.tiling = hostImage ? vk::ImageTiling::eLinear : vk::ImageTiling::eOptimal;
@@ -3281,7 +3281,7 @@ public:
 	// vk::ImageUsageFlagBits::eSampled (if image will be read from pixel shader)
 	// vk::ImageUsageFlagBits::eTransferSrc (if image is a source for a transfer/copy from/... image operation)
 	// vk::ImageUsageFlagBits::eTransferDst (if image is a destination for a transfer/copy to/clear image operation)
-	TextureImage3D(vk::ImageUsageFlags const ImageUsage, vk::Device device, uint32_t width, uint32_t height, uint32_t depth, uint32_t mipLevels = 1U, vk::Format format = vk::Format::eB8G8R8A8Unorm, bool hostImage = false, bool const bDedicatedMemory = false) {
+	TextureImage3D(vk::ImageUsageFlags const ImageUsage, vk::Device const& __restrict device, uint32_t const width, uint32_t const height, uint32_t const depth, uint32_t const mipLevels = 1, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false, bool const bDedicatedMemory = false) {
 		vk::ImageCreateInfo info;
 		info.flags = {};
 		info.imageType = vk::ImageType::e3D;
@@ -3313,7 +3313,7 @@ public:
 	// vk::ImageUsageFlagBits::eTransferDst (if image is a destination for a transfer/copy to/clear image operation)
 	// TextureImageStorage2D is specific for compute shaders
 	// and the Image Usage should be specific aswell to optimize access to image resource
-	TextureImageStorage2D(vk::ImageUsageFlags const ImageUsage, vk::Device device, uint32_t const width, uint32_t const height, uint32_t const mipLevels = 1U, vk::SampleCountFlagBits const msaaSamples = vk::SampleCountFlagBits::e1, vk::Format format = vk::Format::eB8G8R8A8Unorm, bool hostImage = false, bool const bDedicatedMemory = false) {
+	TextureImageStorage2D(vk::ImageUsageFlags const ImageUsage, vk::Device const& __restrict device, uint32_t const width, uint32_t const height, uint32_t const mipLevels = 1U, vk::SampleCountFlagBits const msaaSamples = vk::SampleCountFlagBits::e1, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false, bool const bDedicatedMemory = false) {
 		vk::ImageCreateInfo info;
 		info.flags = {};
 		info.imageType = vk::ImageType::e2D;
@@ -3345,7 +3345,7 @@ public:
 	// vk::ImageUsageFlagBits::eTransferDst (if image is a destination for a transfer/copy to/clear image operation)
 	// TextureImageStorage3D is specific for compute shaders
 	// and the Image Usage should be specific aswell to optimize access to image resource
-	TextureImageStorage3D(vk::ImageUsageFlags const ImageUsage, vk::Device device, uint32_t const width, uint32_t const height, uint32_t const depth, uint32_t const mipLevels = 1U, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false, bool const bDedicatedMemory = false) {
+	TextureImageStorage3D(vk::ImageUsageFlags const ImageUsage, vk::Device const& __restrict device, uint32_t const width, uint32_t const height, uint32_t const depth, uint32_t const mipLevels = 1U, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false, bool const bDedicatedMemory = false) {
 		vk::ImageCreateInfo info;
 		info.flags = {};
 		info.imageType = vk::ImageType::e3D;
@@ -3371,7 +3371,7 @@ public:
   TextureImageCube() {
   }
 
-  TextureImageCube(vk::Device device, uint32_t const width, uint32_t const height, uint32_t const mipLevels=1, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false) {
+  TextureImageCube(vk::Device const& __restrict device, uint32_t const width, uint32_t const height, uint32_t const mipLevels=1, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false) {
     vk::ImageCreateInfo info;
     info.flags = {vk::ImageCreateFlagBits::eCubeCompatible};
     info.imageType = vk::ImageType::e2D;
@@ -3402,7 +3402,7 @@ public:
 	// also noticed that D32 FLOAT with or without stencil is the only depth formats that can use "optimal" image memory (vulkan caps viewer)
     // D16 has a slight performance boost due to requiring less memory bandwidth
 	// D16 Precision seems to be enough for orthographic projection (linear z buffer!!!) - noticed some artifacts while raymarching - switch to 32bit float instead
-	DepthAttachmentImage(vk::Device device, uint32_t const width, uint32_t const height, vk::SampleCountFlagBits const msaaSamples, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue, bool const isSampled = false, bool const isInputAttachment = false) {
+	DepthAttachmentImage(vk::Device const& __restrict device, uint32_t const width, uint32_t const height, vk::SampleCountFlagBits const msaaSamples, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue, bool const isSampled = false, bool const isInputAttachment = false) {
     vk::ImageCreateInfo info;
     info.flags = {};
 
@@ -3434,7 +3434,7 @@ class StencilAttachmentImage : public GenericImage {	// default format is stenci
 public:
 	StencilAttachmentImage() {
 	}
-	StencilAttachmentImage(vk::Device device, uint32_t const width, uint32_t const height, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue) {
+	StencilAttachmentImage(vk::Device const& __restrict device, uint32_t const width, uint32_t const height, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue) {
 		vk::ImageCreateInfo info;
 		info.flags = {};
 
@@ -3468,7 +3468,7 @@ public:
 	DepthImage() {
 	}
 	// R32F
-	DepthImage(vk::Device device, uint32_t const width, uint32_t const height, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue, bool const isColorAttachment, bool const isStorage, vk::Format const format = vk::Format::eR32Sfloat) {
+	DepthImage(vk::Device const& __restrict device, uint32_t const width, uint32_t const height, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue, bool const isColorAttachment, bool const isStorage, vk::Format const format = vk::Format::eR32Sfloat) {
 		vk::ImageCreateInfo info;
 		info.flags = {};
 
@@ -3497,7 +3497,7 @@ public:
   ColorAttachmentImage() {
   }
 
-  ColorAttachmentImage(vk::Device device, uint32_t const width, uint32_t const height, vk::SampleCountFlagBits const msaaSamples, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue, bool const isSampled = false, bool const isInputAttachment = false, bool const isCopyable = false, vk::Format const format = vk::Format::eB8G8R8A8Unorm, vk::ImageUsageFlags const additional_flags = (vk::ImageUsageFlagBits)0 ) {
+  ColorAttachmentImage(vk::Device const& __restrict device, uint32_t const width, uint32_t const height, vk::SampleCountFlagBits const msaaSamples, vk::CommandPool const& __restrict commandPool, vk::Queue const& __restrict queue, bool const isSampled = false, bool const isInputAttachment = false, bool const isCopyable = false, vk::Format const format = vk::Format::eB8G8R8A8Unorm, vk::ImageUsageFlags const additional_flags = (vk::ImageUsageFlagBits)0 ) {
     vk::ImageCreateInfo info;
     info.flags = {};
 
