@@ -744,8 +744,8 @@ public:
 	  auto const pms = physicalDevice_.getSurfacePresentModes2EXT(surfaceInfo).value;
 	  vk::PresentModeKHR swapchainPresentMode = pms[0]; // default to first available
 
-	  // in order of preference - triple buffering and lowest latency
-	  /*if (std::find(pms.begin(), pms.end(), vk::PresentModeKHR::eMailbox) != pms.end()) { // lowest latency, best mode for 3 swapchain images (no tearing) [nvidia only?]
+	  // in order of preference - lowest latency
+	  if (std::find(pms.begin(), pms.end(), vk::PresentModeKHR::eMailbox) != pms.end()) { // lowest latency, best mode for 3 swapchain images (no tearing) [nvidia only?]
 		swapchainPresentMode = vk::PresentModeKHR::eMailbox;
 	  }
 	  else if (std::find(pms.begin(), pms.end(), vk::PresentModeKHR::eImmediate) != pms.end()) { // lowest latency (tearing) - ** bugfix ** preferred over vsync options. vsync causes microstuttering when vsync is on. tearing is non-existant - especially on a variable framerate display.
@@ -754,7 +754,7 @@ public:
 	  else if (std::find(pms.begin(), pms.end(), vk::PresentModeKHR::eFifoRelaxed) != pms.end()) { // vsync partial on (possible tearing) [micro-stuttering]
 		swapchainPresentMode = vk::PresentModeKHR::eFifoRelaxed;
 	  }
-	  else*/ if (std::find(pms.begin(), pms.end(), vk::PresentModeKHR::eFifo) != pms.end()) { // vsync on (no tearing) [micro-stuttering, high latency, application locked to fps]
+	  else if (std::find(pms.begin(), pms.end(), vk::PresentModeKHR::eFifo) != pms.end()) { // vsync on (no tearing) [micro-stuttering, high latency, application locked to fps]
 		swapchainPresentMode = vk::PresentModeKHR::eFifo;
 	  }
 
@@ -1105,20 +1105,31 @@ public:
 	  point2D_t const downResFrameBufferSz(vku::getDownResolution(frameBufferSz));
 
 	  {
+		  // Choose a full hdr 16bpc pipeline only if in HDR mode. When not HDR, the 8bpc pipeline is used. 
+		  //  -advantages:  -no need to tonemap from 16bpc->8bpc when HDR mode is not in use, a simple 8bpc pipeline is used
+		  //                -hdr mode looks "most" similar to 8bpc mode due to tonemapping not being used at all.
+		  //                -simpler
+		  //  -Disadvantages:  -no hdr lighting for 8bpc pipeline, does not tonemap lighting values to 8bpc color space.
+		  //                   -hdr lighting enabled only when HDR is being used / supported by a HDR10 compatible display.
+		  //
+		  //  16bit HDR values are used internally, then output to HDR10 (10bit) as per the spec @ https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.2087-0-201510-I!!PDF-E.pdf
+		  //
+		  vk::Format pipelineFormat(isHDR() ? vk::Format::eR16G16B16A16Unorm : vk::Format::eB8G8R8A8Unorm);
+
 		  // only for simplifying this critical section / initialization of all color attachments, depth attachments for readability
 		  auto const& __restrict transientCommandPool = *commandPool_[eCommandPools::TRANSIENT_POOL];
 		  
-		  colorImage_ = vku::ColorAttachmentImage(device, width_, height_, vku::DefaultSampleCount, transientCommandPool, graphicsQueue_, false, false, false, vk::Format::eB8G8R8A8Unorm);	// not sampled, not inputattachment, not copyable
+		  colorImage_ = vku::ColorAttachmentImage(device, width_, height_, vku::DefaultSampleCount, transientCommandPool, graphicsQueue_, false, false, false, pipelineFormat);	// not sampled, not inputattachment, not copyable
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)colorImage_.image(), vkNames::Image::colorImage);
 		  
 		  depthImage_ = vku::DepthAttachmentImage(device, width_, height_, vku::DefaultSampleCount, transientCommandPool, graphicsQueue_, false, true);  // is inputattachment
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)depthImage_.image(), vkNames::Image::depthImage);
 
 		  for (uint32_t i = 0; i < 2; ++i) {
-			  lastColorImage_[i] = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, false, false, vk::Format::eB8G8R8A8Unorm);	// is sampled, not inputattachment, not copyable
+			  lastColorImage_[i] = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, false, false, pipelineFormat);	// is sampled, not inputattachment, not copyable
 			  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)lastColorImage_[i].image(), vkNames::Image::lastColorImage);
 		  }
-		  lastColorImage_[2] = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, true, false, vk::Format::eB8G8R8A8Unorm);	// not sampled, is inputattachment, not copyable
+		  lastColorImage_[2] = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, true, false, pipelineFormat);	// not sampled, is inputattachment, not copyable
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)lastColorImage_[2].image(), vkNames::Image::lastColorImage);
 
 		  mouseImage_.multisampled = vku::ColorAttachmentImage(device, width_, height_, vku::DefaultSampleCount, transientCommandPool, graphicsQueue_, false, false, false, vk::Format::eR16G16Unorm);	// not sampled, not inputattachment, not copyable
@@ -1142,9 +1153,9 @@ public:
 		  }
 
 		  // vk::ImageUsageFlagBits::eTransferDst no longer needed as temporal blending has been enabled for reconstruction (no clears!)
-		  colorVolumetricImage_.checkered = vku::TextureImageStorage2D(vk::ImageUsageFlagBits::eSampled /*| vk::ImageUsageFlagBits::eTransferDst*/, device, uint32_t(downResFrameBufferSz.x), uint32_t(downResFrameBufferSz.y), 1U, vk::SampleCountFlagBits::e1, vk::Format::eB8G8R8A8Unorm, false, true);  // not host image, is dedicated
-		  colorVolumetricImage_.resolved = vku::ColorAttachmentImage(device, uint32_t(downResFrameBufferSz.x), uint32_t(downResFrameBufferSz.y), vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, false, false, vk::Format::eB8G8R8A8Unorm);  // is sampled, not inputattachment, not copyable
-		  colorVolumetricImage_.upsampled = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, true, false, vk::Format::eB8G8R8A8Unorm, vk::ImageUsageFlagBits::eTransferDst);  // is sampled, is inputattachment, not copyable
+		  colorVolumetricImage_.checkered = vku::TextureImageStorage2D(vk::ImageUsageFlagBits::eSampled /*| vk::ImageUsageFlagBits::eTransferDst*/, device, uint32_t(downResFrameBufferSz.x), uint32_t(downResFrameBufferSz.y), 1U, vk::SampleCountFlagBits::e1, pipelineFormat, false, true);  // not host image, is dedicated
+		  colorVolumetricImage_.resolved = vku::ColorAttachmentImage(device, uint32_t(downResFrameBufferSz.x), uint32_t(downResFrameBufferSz.y), vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, false, false, pipelineFormat);  // is sampled, not inputattachment, not copyable
+		  colorVolumetricImage_.upsampled = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, true, false, pipelineFormat, vk::ImageUsageFlagBits::eTransferDst);  // is sampled, is inputattachment, not copyable
 		  colorVolumetricImage_.upsampled.clear(device, transientCommandPool, graphicsQueue_); // temporally sampled image must ensure cleared for first usage.
 
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)colorVolumetricImage_.checkered.image(), vkNames::Image::colorVolumetricImage_checkered);
@@ -1152,28 +1163,29 @@ public:
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)colorVolumetricImage_.upsampled.image(), vkNames::Image::colorVolumetricImage_upsampled);
 
 		  // reflections are captured in screen space (2D) on a half-res render target
-		  colorReflectionImage_.checkered = vku::TextureImageStorage2D(vk::ImageUsageFlagBits::eSampled /*| vk::ImageUsageFlagBits::eTransferDst*/, device, uint32_t(downResFrameBufferSz.x), uint32_t(downResFrameBufferSz.y), 1U, vk::SampleCountFlagBits::e1, vk::Format::eB8G8R8A8Unorm, false, true);  // not host image, is dedicated
-		  colorReflectionImage_.resolved = vku::ColorAttachmentImage(device, uint32_t(downResFrameBufferSz.x), uint32_t(downResFrameBufferSz.y), vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, false, false, vk::Format::eB8G8R8A8Unorm);  // is sampled, not inputattachment, not copyable
-		  colorReflectionImage_.upsampled = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, true, false, vk::Format::eB8G8R8A8Unorm, vk::ImageUsageFlagBits::eTransferDst);  // is sampled, is inputattachment, not copyable
+		  colorReflectionImage_.checkered = vku::TextureImageStorage2D(vk::ImageUsageFlagBits::eSampled /*| vk::ImageUsageFlagBits::eTransferDst*/, device, uint32_t(downResFrameBufferSz.x), uint32_t(downResFrameBufferSz.y), 1U, vk::SampleCountFlagBits::e1, pipelineFormat, false, true);  // not host image, is dedicated
+		  colorReflectionImage_.resolved = vku::ColorAttachmentImage(device, uint32_t(downResFrameBufferSz.x), uint32_t(downResFrameBufferSz.y), vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, false, false, pipelineFormat);  // is sampled, not inputattachment, not copyable
+		  colorReflectionImage_.upsampled = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, true, false, pipelineFormat, vk::ImageUsageFlagBits::eTransferDst);  // is sampled, is inputattachment, not copyable
 		  colorReflectionImage_.upsampled.clear(device, transientCommandPool, graphicsQueue_); // temporally sampled image must ensure cleared for first usage.
 
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)colorReflectionImage_.checkered.image(), vkNames::Image::colorReflectionImage_checkered);
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)colorReflectionImage_.resolved.image(), vkNames::Image::colorReflectionImage_resolved);
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)colorReflectionImage_.upsampled.image(), vkNames::Image::colorReflectionImage_upsampled);
 
+		  // gui is always non-hdr
 		  guiImage_.multisampled = vku::ColorAttachmentImage(device, width_, height_, vku::DefaultSampleCount, transientCommandPool, graphicsQueue_, false, false, false);	// not sampled, not inputattachment, not copyable
 		  guiImage_.resolved = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, false, true, false);	// not sampled, is inputattachment, not copyable
 
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)guiImage_.multisampled.image(), vkNames::Image::guiImage);
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)guiImage_.resolved.image(), vkNames::Image::guiImage);
 
-		  offscreenImage_.multisampled = vku::ColorAttachmentImage(device, width_, height_, vku::DefaultSampleCount, transientCommandPool, graphicsQueue_, false, false, false);	// not sampled, not inputattachment, not copyable
-		  offscreenImage_.resolved = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, false, true);	// sampled, not inputattachment, copyable
+		  offscreenImage_.multisampled = vku::ColorAttachmentImage(device, width_, height_, vku::DefaultSampleCount, transientCommandPool, graphicsQueue_, false, false, false, pipelineFormat);	// not sampled, not inputattachment, not copyable
+		  offscreenImage_.resolved = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, true, false, true, pipelineFormat);	// sampled, not inputattachment, copyable
 
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)offscreenImage_.multisampled.image(), vkNames::Image::offscreenImage);
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eImage, (VkImage)offscreenImage_.resolved.image(), vkNames::Image::offscreenImage);
 
-		  colorDummy_ = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, false, false, false, vk::Format::eB8G8R8A8Unorm);	// not sampled, not inputattachment, not copyable
+		  colorScratch_ = vku::ColorAttachmentImage(device, width_, height_, vk::SampleCountFlagBits::e1, transientCommandPool, graphicsQueue_, false, false, false, pipelineFormat);	// not sampled, not inputattachment, not copyable
 		
 		  vku::executeImmediately(device, transientCommandPool, graphicsQueue_, [&](vk::CommandBuffer cb) {
 
@@ -1193,7 +1205,7 @@ public:
 			  guiImage().setLayout(cb, vk::ImageLayout::eShaderReadOnlyOptimal);
 
 			  // remains a color attachment forever, do not transition to other layouts
-			  colorDummy_.setLayout(cb, vk::ImageLayout::eColorAttachmentOptimal);
+			  colorScratch_.setLayout(cb, vk::ImageLayout::eColorAttachmentOptimal);
 			 
 		   });
 	  }
@@ -1873,7 +1885,7 @@ public:
 		  vku::RenderpassMaker rpm;
 
 		  // The colour attachment.
-		  rpm.attachmentBegin(colorDummy_.format());
+		  rpm.attachmentBegin(colorScratch_.format());
 		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);					 // 0
 
 		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eDontCare);
@@ -1930,7 +1942,7 @@ public:
 	  framebuffers_[eFrameBuffers::POSTAA_0] = new vk::UniqueFramebuffer[max_image_count];
 	  for (int i = 0; i != max_image_count; ++i) {
 
-		  vk::ImageView const attachments[2] = { colorDummy_.imageView(), lastColorImage_[2].imageView() };
+		  vk::ImageView const attachments[2] = { colorScratch_.imageView(), lastColorImage_[2].imageView() };
 		  vk::FramebufferCreateInfo const fbci{ {}, *postAAPass_[0], _countof(attachments), attachments, width_, height_, 1 };
 		  framebuffers_[eFrameBuffers::POSTAA_0][i] = std::move(device.createFramebufferUnique(fbci).value);
 
@@ -1940,7 +1952,7 @@ public:
 	  framebuffers_[eFrameBuffers::POSTAA_1] = new vk::UniqueFramebuffer[max_image_count];
 	  for (int i = 0; i != max_image_count; ++i) {
 
-		  vk::ImageView const attachments[2] = { colorDummy_.imageView(), lastColorImage_[2].imageView() };
+		  vk::ImageView const attachments[2] = { colorScratch_.imageView(), lastColorImage_[2].imageView() };
 		  vk::FramebufferCreateInfo const fbci{ {}, *postAAPass_[1], _countof(attachments), attachments, width_, height_, 1 };
 		  framebuffers_[eFrameBuffers::POSTAA_1][i] = std::move(device.createFramebufferUnique(fbci).value);
 
@@ -1950,7 +1962,7 @@ public:
 	  framebuffers_[eFrameBuffers::POSTAA_2] = new vk::UniqueFramebuffer[max_image_count];
 	  for (int i = 0; i != max_image_count; ++i) {
 
-		  vk::ImageView const attachments[2] = { colorDummy_.imageView(), lastColorImage_[2].imageView() };
+		  vk::ImageView const attachments[2] = { colorScratch_.imageView(), lastColorImage_[2].imageView() };
 		  vk::FramebufferCreateInfo const fbci{ {}, *postAAPass_[2], _countof(attachments), attachments, width_, height_, 1 };
 		  framebuffers_[eFrameBuffers::POSTAA_2][i] = std::move(device.createFramebufferUnique(fbci).value);
 
@@ -3093,7 +3105,7 @@ private:
   vku::ColorAttachmentImage lastColorImage_[3];  // first image will be resolved to contain render of opaques, this is used by transparency as a "grab pass" of only opaques
 												 // second image  "" ""  ""  ""  ""   "" ""  "" "" "" opaques & transparents, this is used by PostAA as the main color texture sampled for the final frame.
 												 // third image is the final anti-aliased last color frame, used by temporal AA
-  vku::ColorAttachmentImage colorDummy_;	  // post aa dummy image
+  vku::ColorAttachmentImage colorScratch_;	  // post aa scratch (multiple usage) image
 
   struct {
 	  vku::ColorAttachmentImage		multisampled;
