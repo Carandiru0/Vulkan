@@ -242,6 +242,7 @@ public:
 	// Transfer quewe is selected by granularity. eg.) 8x8x8 min granularity allows for faster clears, uploads via dma if image has dimensions divisable by 8, etc.
 	FMT_LOG_OK(GPU_LOG, "Transfer Queue Selected < {:s} {:d} >", vk::to_string(qprops[transferQueueFamilyIndex_].queueFlags), transferQueueFamilyIndex_);
 
+	// -Features only, no EXT, KHR (handled later)
 	vk::PhysicalDeviceVulkanMemoryModelFeatures supportedMemoryModel{};
 	vk::PhysicalDevice8BitStorageFeatures supportedByteStorage{};
 	vk::PhysicalDeviceMaintenance4Features supportedMaintenance4{};
@@ -259,7 +260,6 @@ public:
 
 	enabledFeatures.geometryShader = supportedFeatures.features.geometryShader;
 	enabledFeatures.sampleRateShading = supportedFeatures.features.sampleRateShading;
-	enabledFeatures.depthClamp = supportedFeatures.features.depthClamp;
 	enabledFeatures.samplerAnisotropy = supportedFeatures.features.samplerAnisotropy;
 	//enabledFeatures.robustBufferAccess = supportedFeatures.features.robustBufferAccess; // safer but a lot slower good for debugging out of bounds access
 	enabledFeatures.textureCompressionBC = supportedFeatures.features.textureCompressionBC;
@@ -268,12 +268,12 @@ public:
 	enabledFeatures.vertexPipelineStoresAndAtomics = supportedFeatures.features.vertexPipelineStoresAndAtomics;
 	enabledFeatures.fragmentStoresAndAtomics = supportedFeatures.features.fragmentStoresAndAtomics;
 
+	// only printing *required* features
 	PRINT_FEATURE(supportedMemoryModel.vulkanMemoryModel, "vulkan memory model"); if (!supportedMemoryModel.vulkanMemoryModel) return;
 	PRINT_FEATURE(supportedByteStorage.storageBuffer8BitAccess, "storage buffer 8bit"); if (!supportedByteStorage.storageBuffer8BitAccess) return;
 	PRINT_FEATURE(supportedMaintenance4.maintenance4, "maintenance 4"); if (!supportedMaintenance4.maintenance4) return;
 	PRINT_FEATURE(enabledFeatures.geometryShader, "geometry shader"); if (!enabledFeatures.geometryShader) return;
 	PRINT_FEATURE(enabledFeatures.sampleRateShading, "sample shading"); if (!enabledFeatures.sampleRateShading) return;
-	PRINT_FEATURE(enabledFeatures.depthClamp, "depth clamping"); if (!enabledFeatures.depthClamp) return;
 	PRINT_FEATURE(enabledFeatures.samplerAnisotropy, "anisotropic filtering"); if (!enabledFeatures.samplerAnisotropy) return;
 	PRINT_FEATURE(enabledFeatures.textureCompressionBC, "texture compression"); if (!enabledFeatures.textureCompressionBC) return;
 	PRINT_FEATURE(enabledFeatures.independentBlend, "independent blending"); if (!enabledFeatures.independentBlend) return;	  // independent (different) blend states for multiple color attachments
@@ -284,8 +284,8 @@ public:
     vku::DeviceMaker dm{};
     dm.defaultLayers();
 
-	// add extensions
-	bool supported(false), memorybudget(false), fullsubgroups(false);
+	// add extensions EXT, KHR here only
+	bool supported(false), memorypriority(false), memorypageable(false), memorybudget(false), fullsubgroups(false);
 	auto const extensions = physical_device_.enumerateDeviceExtensionProperties().value;
 
 	// Required Extensions //
@@ -293,7 +293,11 @@ public:
 	if (isUserAdmin()) { // only supporting boost of queue priority if program is run as administrator. Boosts to high for all queues if admin. Required only if program is run as admin.
 		ADD_EXTENSION(extensions, dm, VK_EXT_GLOBAL_PRIORITY_EXTENSION_NAME, supported); if (!supported) return;
 	}
+
+	// Optional Extensions //
 	ADD_EXTENSION(extensions, dm, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME, memorybudget); // optional, can use internal tracking of memory in vma if not available
+	ADD_EXTENSION(extensions, dm, VK_EXT_MEMORY_PRIORITY_EXTENSION_NAME, memorypriority); // optional, required by pageable memory extension
+	ADD_EXTENSION(extensions, dm, VK_EXT_PAGEABLE_DEVICE_LOCAL_MEMORY_EXTENSION_NAME, memorypageable); // optional. this requires latest drivers to be installed for the gpu. gpu most also be recent in the last 5 years or so. NVIDIA Geforce, AMD Radeon, INTEL Arc *new* drivers all support this extension.
 	ADD_EXTENSION(extensions, dm, VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME, fullsubgroups); // optional, optimization for compute shader subgroup usage
 	ComputePipelineMaker::fullsubgroups_supported = fullsubgroups;
 
@@ -359,22 +363,43 @@ public:
 	}
 	
 	// ################ start of pNext linked list chain for device creation	
-	vk::PhysicalDeviceSubgroupSizeControlFeaturesEXT computeFullgroups{
+	vk::PhysicalDeviceSubgroupSizeControlFeaturesEXT computeFullgroups{ // - optional //  *** last
 		VK_TRUE,
 		fullsubgroups
 	};
-	computeFullgroups.pNext = nullptr;
-	
-	vk::PhysicalDeviceMaintenance4Features maintenance{
-		VK_TRUE,										// - required (supportedMaintenance4.maintenance4) //
+	computeFullgroups.pNext = nullptr; // last end
+
+	// insert new extensions here //
+
+	vk::PhysicalDevicePageableDeviceLocalMemoryFeaturesEXT mempaged{ // - optional //
+		VK_TRUE
 	};
-	if (fullsubgroups) {
+	vk::PhysicalDeviceMemoryPriorityFeaturesEXT mempriority{    // - optional //
+		VK_TRUE
+	};
+
+	vk::PhysicalDeviceMaintenance4Features maintenance{
+	  VK_TRUE										           // - required (supportedMaintenance4.maintenance4) //
+	};
+
+	if (memorypriority && memorypageable) {
+		maintenance.pNext = &mempriority;
+		mempriority.pNext = &mempaged;
+
+		if (fullsubgroups) {
+			mempaged.pNext = &computeFullgroups;
+		}
+		else {
+			mempaged.pNext = nullptr; // end
+		}
+	}
+	else if (fullsubgroups) {
 		maintenance.pNext = &computeFullgroups;
 	}
 	else {
-		maintenance.pNext = nullptr;
+		maintenance.pNext = nullptr; // end
 	}
-	
+
 	vk::PhysicalDevice8BitStorageFeatures byteStorage{
 		VK_TRUE,												 // - required (supportedByteStorage.storageBuffer8BitAccess) //
 		supportedByteStorage.uniformAndStorageBuffer8BitAccess,  // - optional //
@@ -415,11 +440,12 @@ public:
 	// create vma global singleton instance in vku framework
 	VmaAllocatorCreateInfo allocatorInfo{};
 	allocatorInfo.vulkanApiVersion = VULKAN_API_VERSION_USED;
-	allocatorInfo.flags = VMA_ALLOCATOR_CREATE_KHR_DEDICATED_ALLOCATION_BIT | (memorybudget ? VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT : (VmaAllocatorCreateFlags)0);
+	allocatorInfo.flags = VMA_ALLOCATOR_CREATE_KHR_DEDICATED_ALLOCATION_BIT 
+		                  | (memorybudget ? VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT : (VmaAllocatorCreateFlags)0) 
+		                  | ((memorypriority & memorypageable) ? VMA_ALLOCATOR_CREATE_EXT_MEMORY_PRIORITY_BIT : (VmaAllocatorCreateFlags)0);
 	allocatorInfo.instance = *instance_;
 	allocatorInfo.physicalDevice = physical_device_;
 	allocatorInfo.device = *device_;
-	//allocatorInfo.pVulkanFunctions
 
 	ok_ = (VkResult::VK_SUCCESS == vmaCreateAllocator(&allocatorInfo, &vma_));  // note, as requirement of application, allocator singleton can only be access by a single thread at any given time!
 
@@ -506,6 +532,14 @@ public:
 	  }
   }
 
+  bool const isVsyncForcedOn() const {
+	  return(bForceVsync);
+  }
+
+  void ForceVsyncOn() {
+	  bForceVsync = true;
+  }
+
   /// Returns true if the Framework has been built correctly.
   bool ok() const { return ok_; }
 
@@ -530,6 +564,8 @@ private:
   bool bExtendedColorspaceOn = false,
 	   bHDRExtensionEnabled = false,
 	   bHDRExtensionSupported = false;
+
+  bool bForceVsync = false;
 
   bool ok_ = false;
 };
@@ -566,7 +602,7 @@ public:
     auto ci = vk::XlibSurfaceCreateInfoKHR{{}, display, x11window};
     auto surface = instance.createXlibSurfaceKHR(ci);
 #endif
-    init(fw.instance(), device, physicalDevice, graphicsQueueFamilyIndex, computeQueueFamilyIndex, transferQueueFamilyIndex, surface, monitor);
+    init(fw.instance(), device, physicalDevice, graphicsQueueFamilyIndex, computeQueueFamilyIndex, transferQueueFamilyIndex, surface, monitor, fw.isVsyncForcedOn());
   }
 #endif
 
@@ -680,13 +716,13 @@ public:
 
 #if defined(FULLSCREEN_EXCLUSIVE) && defined(VK_EXT_full_screen_exclusive)
 	  if (monitor_ && fw_.isFullScreenExclusiveExtensionSupported()) {
-		  bFullScreenExclusiveOn = surfaceCapFullscreenExclusive.fullScreenExclusiveSupported;
-		  if (bFullScreenExclusiveOn) {
+		  bFullScreenExclusiveOn_ = surfaceCapFullscreenExclusive.fullScreenExclusiveSupported;
+		  if (bFullScreenExclusiveOn_) {
 			  fmt::print(fg(fmt::color::lime_green), "fullscreen exclusive\n");
 		  }
 	  }
 	  else { // Extension doesn't exist or user settings ini has disabled exclusivity, silently fail/disable exclusive fullscreen
-		  bFullScreenExclusiveOn = false;
+		  bFullScreenExclusiveOn_ = false;
 	  }
 #endif
 
@@ -703,21 +739,21 @@ public:
 	  else { // otherwise find optimal format
 
 		  // search for 10bit HDR target
-		  if (bFullScreenExclusiveOn & fw_.isHDRExtensionSupported()) { // if fullscreen exclusive is on (enabled & supported & turned on) only. HDR does not work in windowed mode properly unless "Windows HDR" is toggled on in settings for the users computer
+		  if (bFullScreenExclusiveOn_ & fw_.isHDRExtensionSupported()) { // if fullscreen exclusive is on (enabled & supported & turned on) only. HDR does not work in windowed mode properly unless "Windows HDR" is toggled on in settings for the users computer
 			  for (auto const& fmt : fmts) {									// But there is no way of query the state of "Windows HDR" being on for the application. So if Windows HDR is off, then the windowed mode with hdr on here would be incorrect.
 																		// however, if fullscreen exclusive is on (default), then HDR can be properly controlled within the application.
 				  if ((vk::Format::eA2R10G10B10UnormPack32 == fmt.surfaceFormat.format && vk::ColorSpaceKHR::eHdr10St2084EXT == fmt.surfaceFormat.colorSpace) || // *bugfix - amd is rgb for hdr target, nvidia is bgr for hdr target
 					  (vk::Format::eA2B10G10R10UnormPack32 == fmt.surfaceFormat.format && vk::ColorSpaceKHR::eHdr10St2084EXT == fmt.surfaceFormat.colorSpace)) {
 					  swapchainImageFormat_ = fmt.surfaceFormat.format;
 					  swapchainColorSpace_ = fmt.surfaceFormat.colorSpace;
-					  bHDROn = true;
+					  bHDROn_ = true;
 					  break;
 				  }
 			  }
 		  }
 
 		  // if no 10 bit target exists,
-		  if (!bHDROn) { // search for preferred 8bit target
+		  if (!bHDROn_) { // search for preferred 8bit target
 			  for (auto const& fmt : fmts) {
 				  if (vk::Format::eB8G8R8A8Unorm == fmt.surfaceFormat.format && vk::ColorSpaceKHR::eSrgbNonlinear == fmt.surfaceFormat.colorSpace) {
 					  swapchainImageFormat_ = fmt.surfaceFormat.format;
@@ -731,10 +767,10 @@ public:
 	  if ((vk::Format::eA2R10G10B10UnormPack32 == swapchainImageFormat_ && vk::ColorSpaceKHR::eHdr10St2084EXT == swapchainColorSpace_) || // *bugfix - amd is rgb for hdr target, nvidia is bgr for hdr target
 		  (vk::Format::eA2B10G10R10UnormPack32 == swapchainImageFormat_ && vk::ColorSpaceKHR::eHdr10St2084EXT == swapchainColorSpace_)) {
 		
-		  fmt::print(fg(fmt::color::hot_pink), "10bit Backbuffer - HDR10");
+		  fmt::print(fg(fmt::color::hot_pink), "10bpc Backbuffer - HDR10");
 	  }
 	  else if (swapchainImageFormat_ == vk::Format::eB8G8R8A8Unorm && swapchainColorSpace_ == vk::ColorSpaceKHR::eSrgbNonlinear) {
-		  fmt::print(fg(fmt::color::hot_pink), "8bit Backbuffer - SRGB");
+		  fmt::print(fg(fmt::color::hot_pink), "8bpc Backbuffer - SRGB");
 	  }
 	  else {
 		  fmt::print(fg(fmt::color::red), "[FAIL] No compatible backbuffer format / color space found!");
@@ -744,11 +780,10 @@ public:
 	  auto const pms = physicalDevice_.getSurfacePresentModes2EXT(surfaceInfo).value;
 	  vk::PresentModeKHR swapchainPresentMode = pms[0]; // default to first available
 
-	  // in order of preference - lowest latency
-	  if (std::find(pms.begin(), pms.end(), vk::PresentModeKHR::eMailbox) != pms.end()) { // lowest latency, best mode for 3 swapchain images (no tearing) [nvidia only?]
-		swapchainPresentMode = vk::PresentModeKHR::eMailbox;
-	  }
-	  else if (std::find(pms.begin(), pms.end(), vk::PresentModeKHR::eImmediate) != pms.end()) { // lowest latency (tearing) - ** bugfix ** preferred over vsync options. vsync causes microstuttering when vsync is on. tearing is non-existant - especially on a variable framerate display.
+	  // order opposite of preference - lowest latency
+	  // *bugfix - "Mailbox" mode drops frames. This is not good and destroys temporal information between frames. Unsupported.
+
+	  if (std::find(pms.begin(), pms.end(), vk::PresentModeKHR::eImmediate) != pms.end()) { // lowest latency (tearing) - ** bugfix ** preferred over vsync options. vsync causes microstuttering when vsync is on. tearing is non-existant - especially on a variable framerate display.
 		swapchainPresentMode = vk::PresentModeKHR::eImmediate;
 	  }
 	  else if (std::find(pms.begin(), pms.end(), vk::PresentModeKHR::eFifoRelaxed) != pms.end()) { // vsync partial on (possible tearing) [micro-stuttering]
@@ -756,6 +791,10 @@ public:
 	  }
 	  else if (std::find(pms.begin(), pms.end(), vk::PresentModeKHR::eFifo) != pms.end()) { // vsync on (no tearing) [micro-stuttering, high latency, application locked to fps]
 		swapchainPresentMode = vk::PresentModeKHR::eFifo;
+	  }
+
+	  if (bForceVsync_ && std::find(pms.begin(), pms.end(), vk::PresentModeKHR::eFifo) != pms.end()) { // forced vsync .ini option
+		  swapchainPresentMode = vk::PresentModeKHR::eFifo;
 	  }
 
 	  vk::SwapchainCreateInfoKHR swapinfo{};
@@ -782,7 +821,7 @@ public:
 	  swapinfo.oldSwapchain = (swapchain_ ? *swapchain_ : vk::SwapchainKHR{});
 
 #if defined(FULLSCREEN_EXCLUSIVE) && defined(VK_EXT_full_screen_exclusive)
-	  if (bFullScreenExclusiveOn) {
+	  if (bFullScreenExclusiveOn_) {
 		  swapinfo.pNext = &full_screen_exclusive;
 	  }
 #endif
@@ -1057,7 +1096,7 @@ public:
 
   public:
 
-  void init(const vk::Instance &instance, const vk::Device &device, const vk::PhysicalDevice &physicalDevice, uint32_t const graphicsQueueFamilyIndex, uint32_t const computeQueueFamilyIndex, uint32_t const transferQueueFamilyIndex, vk::SurfaceKHR const surface, HMONITOR const& monitor) {
+  void init(const vk::Instance &instance, const vk::Device &device, const vk::PhysicalDevice &physicalDevice, uint32_t const graphicsQueueFamilyIndex, uint32_t const computeQueueFamilyIndex, uint32_t const transferQueueFamilyIndex, vk::SurfaceKHR const surface, HMONITOR const& monitor, bool const bForceVsync) {
 	  
 	  surface_ = surface;
 	  instance_ = instance;
@@ -1069,6 +1108,7 @@ public:
 	  computeQueueFamilyIndex_ = computeQueueFamilyIndex;
 	  transferQueueFamilyIndex_ = transferQueueFamilyIndex;
 	  monitor_ = monitor;
+	  bForceVsync_ = bForceVsync;
 
 	  { // major bugfix: graphics queue is now ALWAYS the presenting queue. It has the lowest latency for present, allows overlap of dma transfers queues used
 		  // in beginning of vku render as a transfer queue is no longer tied up with "presenting". It also has the greatest compatibility among graphics cards.
@@ -1112,7 +1152,7 @@ public:
 		  //  -Disadvantages:  -no hdr lighting for 8bpc pipeline, does not tonemap lighting values to 8bpc color space.
 		  //                   -hdr lighting enabled only when HDR is being used / supported by a HDR10 compatible display.
 		  //
-		  //  16bit HDR values are used internally, then output to HDR10 (10bit) as per the spec @ https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.2087-0-201510-I!!PDF-E.pdf
+		  //  16bit HDR values are used internally, then output to HDR10 (10bit) on present as per the spec @ https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.2087-0-201510-I!!PDF-E.pdf
 		  //
 		  vk::Format pipelineFormat(isHDR() ? vk::Format::eR16G16B16A16Unorm : vk::Format::eB8G8R8A8Unorm);
 
@@ -2951,7 +2991,7 @@ public:
   ~Window() {
 
 #if defined(FULLSCREEN_EXCLUSIVE) && defined(VK_EXT_full_screen_exclusive)
-	  if (bFullScreenExclusiveOn) {
+	  if (bFullScreenExclusiveOn_) {
 		  vkReleaseFullScreenExclusiveModeEXT(device_, *swapchain_);
 	  }
 #endif
@@ -3056,8 +3096,8 @@ public:
   /// Return the number of swap chain images.
   int numImageIndices() const { return (int)images_.size(); }
 
-  bool const isFullScreenExclusive() const { return(bFullScreenExclusiveOn); }
-  bool const isHDR() const { return(bHDROn); }
+  bool const isFullScreenExclusive() const { return(bFullScreenExclusiveOn_); }
+  bool const isHDR() const { return(bHDROn_); }
 
 private:
 	static constexpr uint32_t const double_buffer_count = 2;	// *bugfix:
@@ -3159,8 +3199,9 @@ private:
   vku::double_buffer<bool> staticCommandsDirty_{ false, false };
   
   // extensions enabled & active ? //
-  bool bFullScreenExclusiveOn = false;
-  bool bHDROn = false;
+  bool bFullScreenExclusiveOn_ = false;
+  bool bHDROn_ = false;
+  bool bForceVsync_ = false;
 };
 
 } // namespace vku

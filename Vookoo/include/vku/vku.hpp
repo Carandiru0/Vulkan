@@ -75,10 +75,13 @@
 
 #include <vku/vku_addon.hpp>
 
+#define VMA_DYNAMIC_VULKAN_FUNCTIONS 0 // disable and,
 #define VMA_STATIC_VULKAN_FUNCTIONS 1 // route to volk
 #define VMA_VULKAN_VERSION 1003000 // Vulkan 1.3
 #define VMA_DEDICATED_ALLOCATION 1
 #define VMA_MEMORY_BUDGET 1
+#define VMA_MEMORY_PRIORITY 1
+#define VMA_EXTERNAL_MEMORY 0 // don't need
 
 #ifndef NDEBUG 
 #ifdef VKU_VMA_DEBUG_ENABLED 
@@ -1445,6 +1448,7 @@ public:
 	  allocInfo.preferredFlags = allocInfo.requiredFlags;
 	  allocInfo.flags = (bDedicatedMemory ? VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT : (VmaAllocationCreateFlags)0)
 					  | (bPersistantMapping ? VMA_ALLOCATION_CREATE_MAPPED_BIT : (VmaAllocationCreateFlags)0);
+	  allocInfo.priority = (VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE == gpu_usage) ? 1.0f : ((VMA_MEMORY_USAGE_AUTO_PREFER_HOST != gpu_usage) ? 0.5f : 0.0f); // mark all gpu device local buffers with high priority, otherwise the default priority value 0.5f or 0.0f if AUTO_PREFER_HOST
 
 	  if ((uint32_t)eMappedAccess::Disabled == mapped_access) { // only if not provided
 		
@@ -3015,6 +3019,7 @@ protected:
 	allocInfo.requiredFlags = (VkMemoryPropertyFlags)(hostImage ? (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	allocInfo.preferredFlags = allocInfo.requiredFlags;
 	allocInfo.flags = (bDedicatedMemory ? VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT : (VmaAllocationCreateFlags)0);
+	allocInfo.priority = (VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE == allocInfo.usage) ? 1.0f : 0.0f; // mark all gpu device local images with high priority, otherwise the image is HOST and device local priority does not apply, set to 0.0
 
 	VmaAllocationInfo image_alloc_info{};
 	vmaCreateImage(vma_, (VkImageCreateInfo const* const)&s.info, &allocInfo, (VkImage*)&s.image, &s.allocation, &image_alloc_info);
@@ -3131,6 +3136,25 @@ public:
 		info.initialLayout = hostImage ? vk::ImageLayout::ePreinitialized : vk::ImageLayout::eUndefined;
 		create(device, info, vk::ImageViewType::e1DArray, vk::ImageAspectFlagBits::eColor, hostImage, bDedicatedMemory);
 	}
+
+	// custom image usage flags
+	TextureImage1DArray(vk::ImageUsageFlags const imageUsage, vk::Device const& __restrict device, uint32_t const width, uint32_t const layers, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false, bool const bDedicatedMemory = false) {
+		vk::ImageCreateInfo info;
+		info.flags = {};
+		info.imageType = vk::ImageType::e1D;
+		info.format = format;
+		info.extent = vk::Extent3D{ width, 1U, 1U };
+		info.mipLevels = 1;
+		info.arrayLayers = layers;
+		info.samples = vk::SampleCountFlagBits::e1;
+		info.tiling = hostImage ? vk::ImageTiling::eLinear : vk::ImageTiling::eOptimal;
+		info.usage = imageUsage | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+		info.sharingMode = vk::SharingMode::eExclusive;
+		info.queueFamilyIndexCount = 0;
+		info.pQueueFamilyIndices = nullptr;
+		info.initialLayout = hostImage ? vk::ImageLayout::ePreinitialized : vk::ImageLayout::eUndefined;
+		create(device, info, vk::ImageViewType::e1DArray, vk::ImageAspectFlagBits::eColor, hostImage, bDedicatedMemory);
+	}
 private:
 };
 
@@ -3152,6 +3176,25 @@ public:
 		info.samples = vk::SampleCountFlagBits::e1;
 		info.tiling = hostImage ? vk::ImageTiling::eLinear : vk::ImageTiling::eOptimal;
 		info.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+		info.sharingMode = vk::SharingMode::eExclusive;
+		info.queueFamilyIndexCount = 0;
+		info.pQueueFamilyIndices = nullptr;
+		info.initialLayout = hostImage ? vk::ImageLayout::ePreinitialized : vk::ImageLayout::eUndefined;
+		create(device, info, vk::ImageViewType::e2DArray, vk::ImageAspectFlagBits::eColor, hostImage, bDedicatedMemory);
+	}
+
+	// custom image usage flags
+	TextureImage2DArray(vk::ImageUsageFlags const imageUsage, vk::Device const& __restrict device, uint32_t const width, uint32_t const height, uint32_t const layers, uint32_t const mipLevels = 1, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false, bool const bDedicatedMemory = false) {
+		vk::ImageCreateInfo info;
+		info.flags = {};
+		info.imageType = vk::ImageType::e2D;
+		info.format = format;
+		info.extent = vk::Extent3D{ width, height, 1U };
+		info.mipLevels = mipLevels;
+		info.arrayLayers = layers;
+		info.samples = vk::SampleCountFlagBits::e1;
+		info.tiling = hostImage ? vk::ImageTiling::eLinear : vk::ImageTiling::eOptimal;
+		info.usage = imageUsage | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
 		info.sharingMode = vk::SharingMode::eExclusive;
 		info.queueFamilyIndexCount = 0;
 		info.pQueueFamilyIndices = nullptr;
@@ -3203,6 +3246,25 @@ public:
         info.initialLayout = hostImage ? vk::ImageLayout::ePreinitialized : vk::ImageLayout::eUndefined;
         create(device, info, vk::ImageViewType::e1D, vk::ImageAspectFlagBits::eColor, hostImage, bDedicatedMemory);
     }
+
+	// custom image usage flags
+	TextureImage1D(vk::ImageUsageFlags const imageUsage, vk::Device const& __restrict device, uint32_t const width, uint32_t const mipLevels = 1, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false, bool const bDedicatedMemory = false) {
+		vk::ImageCreateInfo info;
+		info.flags = {};
+		info.imageType = vk::ImageType::e1D;
+		info.format = format;
+		info.extent = vk::Extent3D{ width, 1U, 1U };
+		info.mipLevels = mipLevels;
+		info.arrayLayers = 1;
+		info.samples = vk::SampleCountFlagBits::e1;
+		info.tiling = hostImage ? vk::ImageTiling::eLinear : vk::ImageTiling::eOptimal;
+		info.usage = imageUsage | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+		info.sharingMode = vk::SharingMode::eExclusive;
+		info.queueFamilyIndexCount = 0;
+		info.pQueueFamilyIndices = nullptr;
+		info.initialLayout = hostImage ? vk::ImageLayout::ePreinitialized : vk::ImageLayout::eUndefined;
+		create(device, info, vk::ImageViewType::e1D, vk::ImageAspectFlagBits::eColor, hostImage, bDedicatedMemory);
+	}
 private:
 };
 
@@ -3250,6 +3312,25 @@ public:
     info.initialLayout = hostImage ? vk::ImageLayout::ePreinitialized : vk::ImageLayout::eUndefined;
     create(device, info, vk::ImageViewType::e2D, vk::ImageAspectFlagBits::eColor, hostImage, bDedicatedMemory);
   }
+
+  // custom image usage flags
+  TextureImage2D(vk::ImageUsageFlags const imageUsage, vk::Device const& __restrict device, uint32_t const width, uint32_t const height, uint32_t const mipLevels = 1, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool hostImage = false, bool const bDedicatedMemory = false) {
+	  vk::ImageCreateInfo info;
+	  info.flags = {};
+	  info.imageType = vk::ImageType::e2D;
+	  info.format = format;
+	  info.extent = vk::Extent3D{ width, height, 1U };
+	  info.mipLevels = mipLevels;
+	  info.arrayLayers = 1;
+	  info.samples = vk::SampleCountFlagBits::e1;
+	  info.tiling = hostImage ? vk::ImageTiling::eLinear : vk::ImageTiling::eOptimal;
+	  info.usage = imageUsage | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+	  info.sharingMode = vk::SharingMode::eExclusive;
+	  info.queueFamilyIndexCount = 0;
+	  info.pQueueFamilyIndices = nullptr;
+	  info.initialLayout = hostImage ? vk::ImageLayout::ePreinitialized : vk::ImageLayout::eUndefined;
+	  create(device, info, vk::ImageViewType::e2D, vk::ImageAspectFlagBits::eColor, hostImage, bDedicatedMemory);
+  }
 private:
 };
 
@@ -3281,7 +3362,7 @@ public:
 	// vk::ImageUsageFlagBits::eSampled (if image will be read from pixel shader)
 	// vk::ImageUsageFlagBits::eTransferSrc (if image is a source for a transfer/copy from/... image operation)
 	// vk::ImageUsageFlagBits::eTransferDst (if image is a destination for a transfer/copy to/clear image operation)
-	TextureImage3D(vk::ImageUsageFlags const ImageUsage, vk::Device const& __restrict device, uint32_t const width, uint32_t const height, uint32_t const depth, uint32_t const mipLevels = 1, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false, bool const bDedicatedMemory = false) {
+	TextureImage3D(vk::ImageUsageFlags const imageUsage, vk::Device const& __restrict device, uint32_t const width, uint32_t const height, uint32_t const depth, uint32_t const mipLevels = 1, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false, bool const bDedicatedMemory = false) {
 		vk::ImageCreateInfo info;
 		info.flags = {};
 		info.imageType = vk::ImageType::e3D;
@@ -3291,7 +3372,7 @@ public:
 		info.arrayLayers = 1;
 		info.samples = vk::SampleCountFlagBits::e1;
 		info.tiling = hostImage ? vk::ImageTiling::eLinear : vk::ImageTiling::eOptimal;
-		info.usage = ImageUsage;
+		info.usage = imageUsage;
 		info.sharingMode = vk::SharingMode::eExclusive;
 		info.queueFamilyIndexCount = 0;
 		info.pQueueFamilyIndices = nullptr;
@@ -3313,7 +3394,7 @@ public:
 	// vk::ImageUsageFlagBits::eTransferDst (if image is a destination for a transfer/copy to/clear image operation)
 	// TextureImageStorage2D is specific for compute shaders
 	// and the Image Usage should be specific aswell to optimize access to image resource
-	TextureImageStorage2D(vk::ImageUsageFlags const ImageUsage, vk::Device const& __restrict device, uint32_t const width, uint32_t const height, uint32_t const mipLevels = 1U, vk::SampleCountFlagBits const msaaSamples = vk::SampleCountFlagBits::e1, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false, bool const bDedicatedMemory = false) {
+	TextureImageStorage2D(vk::ImageUsageFlags const imageUsage, vk::Device const& __restrict device, uint32_t const width, uint32_t const height, uint32_t const mipLevels = 1U, vk::SampleCountFlagBits const msaaSamples = vk::SampleCountFlagBits::e1, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false, bool const bDedicatedMemory = false) {
 		vk::ImageCreateInfo info;
 		info.flags = {};
 		info.imageType = vk::ImageType::e2D;
@@ -3323,7 +3404,7 @@ public:
 		info.arrayLayers = 1;
 		info.samples = msaaSamples;
 		info.tiling = hostImage ? vk::ImageTiling::eLinear : vk::ImageTiling::eOptimal;
-		info.usage = ImageUsage | vk::ImageUsageFlagBits::eStorage;
+		info.usage = imageUsage | vk::ImageUsageFlagBits::eStorage;
 		info.sharingMode = vk::SharingMode::eExclusive;
 		info.queueFamilyIndexCount = 0;
 		info.pQueueFamilyIndices = nullptr;
@@ -3345,7 +3426,7 @@ public:
 	// vk::ImageUsageFlagBits::eTransferDst (if image is a destination for a transfer/copy to/clear image operation)
 	// TextureImageStorage3D is specific for compute shaders
 	// and the Image Usage should be specific aswell to optimize access to image resource
-	TextureImageStorage3D(vk::ImageUsageFlags const ImageUsage, vk::Device const& __restrict device, uint32_t const width, uint32_t const height, uint32_t const depth, uint32_t const mipLevels = 1U, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false, bool const bDedicatedMemory = false) {
+	TextureImageStorage3D(vk::ImageUsageFlags const imageUsage, vk::Device const& __restrict device, uint32_t const width, uint32_t const height, uint32_t const depth, uint32_t const mipLevels = 1U, vk::Format const format = vk::Format::eB8G8R8A8Unorm, bool const hostImage = false, bool const bDedicatedMemory = false) {
 		vk::ImageCreateInfo info;
 		info.flags = {};
 		info.imageType = vk::ImageType::e3D;
@@ -3355,7 +3436,7 @@ public:
 		info.arrayLayers = 1;
 		info.samples = vk::SampleCountFlagBits::e1;
 		info.tiling = hostImage ? vk::ImageTiling::eLinear : vk::ImageTiling::eOptimal;
-		info.usage = ImageUsage | vk::ImageUsageFlagBits::eStorage;
+		info.usage = imageUsage | vk::ImageUsageFlagBits::eStorage;
 		info.sharingMode = vk::SharingMode::eExclusive;
 		info.queueFamilyIndexCount = 0;
 		info.pQueueFamilyIndices = nullptr;

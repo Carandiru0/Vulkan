@@ -949,6 +949,8 @@ Used in VmaAllocatorCreateInfo::pVulkanFunctions.
 */
 typedef struct VmaVulkanFunctions
 {
+    PFN_vkSetDeviceMemoryPriorityEXT VMA_NULLABLE vkSetDeviceMemoryPriorityEXT;
+
     /// Required when using VMA_DYNAMIC_VULKAN_FUNCTIONS.
     PFN_vkGetInstanceProcAddr VMA_NULLABLE vkGetInstanceProcAddr;
     /// Required when using VMA_DYNAMIC_VULKAN_FUNCTIONS.
@@ -11484,7 +11486,7 @@ public:
     VkResult CheckCorruption(uint32_t memoryTypeBits);
 
     // Call to Vulkan function vkAllocateMemory with accompanying bookkeeping.
-    VkResult AllocateVulkanMemory(const VkMemoryAllocateInfo* pAllocateInfo, VkDeviceMemory* pMemory);
+    VkResult AllocateVulkanMemory(const VkMemoryAllocateInfo* pAllocateInfo, VkDeviceMemory* pMemory, float const priority);
     // Call to Vulkan function vkFreeMemory with accompanying bookkeeping.
     void FreeVulkanMemory(uint32_t memoryType, VkDeviceSize size, VkDeviceMemory hMemory);
     // Call to Vulkan function vkBindBufferMemory or vkBindBufferMemory2KHR.
@@ -11602,6 +11604,7 @@ private:
         bool map,
         bool isUserDataString,
         bool isMappingAllowed,
+        float priority,
         void* pUserData,
         VmaAllocation* pAllocation);
 
@@ -12859,7 +12862,7 @@ VkResult VmaBlockVector::CreateBlock(VkDeviceSize blockSize, size_t* pNewBlockIn
 #endif // VMA_EXTERNAL_MEMORY
 
     VkDeviceMemory mem = VK_NULL_HANDLE;
-    VkResult res = m_hAllocator->AllocateVulkanMemory(&allocInfo, &mem);
+    VkResult res = m_hAllocator->AllocateVulkanMemory(&allocInfo, &mem, m_Priority);
     if (res < 0)
     {
         return res;
@@ -14226,6 +14229,8 @@ void VmaAllocator_T::ImportVulkanFunctions_Static()
         m_VulkanFunctions.vkGetDeviceImageMemoryRequirements = (PFN_vkGetDeviceImageMemoryRequirements)vkGetDeviceImageMemoryRequirements;
     }
 #endif
+
+    m_VulkanFunctions.vkSetDeviceMemoryPriorityEXT = (PFN_vkSetDeviceMemoryPriorityEXT)vkSetDeviceMemoryPriorityEXT;
 }
 
 #endif // VMA_STATIC_VULKAN_FUNCTIONS == 1
@@ -14276,6 +14281,7 @@ void VmaAllocator_T::ImportVulkanFunctions_Custom(const VmaVulkanFunctions* pVul
     VMA_COPY_IF_NOT_NULL(vkGetDeviceImageMemoryRequirements);
 #endif
 
+    VMA_COPY_IF_NOT_NULL(vkSetDeviceMemoryPriorityEXT);
 #undef VMA_COPY_IF_NOT_NULL
 }
 
@@ -14413,6 +14419,8 @@ void VmaAllocator_T::ValidateVulkanFunctions()
         VMA_ASSERT(m_VulkanFunctions.vkGetDeviceImageMemoryRequirements != VMA_NULL);
     }
 #endif
+
+    VMA_ASSERT(m_VulkanFunctions.vkSetDeviceMemoryPriorityEXT != VMA_NULL);
 }
 
 VkDeviceSize VmaAllocator_T::CalcPreferredBlockSize(uint32_t memTypeIndex)
@@ -14671,6 +14679,7 @@ VkResult VmaAllocator_T::AllocateDedicatedMemory(
             map,
             isUserDataString,
             isMappingAllowed,
+            priority,
             pUserData,
             pAllocations + allocIndex);
         if(res != VK_SUCCESS)
@@ -14725,11 +14734,12 @@ VkResult VmaAllocator_T::AllocateDedicatedMemoryPage(
     bool map,
     bool isUserDataString,
     bool isMappingAllowed,
+    float priority, 
     void* pUserData,
     VmaAllocation* pAllocation)
 {
     VkDeviceMemory hMemory = VK_NULL_HANDLE;
-    VkResult res = AllocateVulkanMemory(&allocInfo, &hMemory);
+    VkResult res = AllocateVulkanMemory(&allocInfo, &hMemory, priority);
     if(res < 0)
     {
         VMA_DEBUG_LOG("    vkAllocateMemory FAILED");
@@ -15385,7 +15395,7 @@ VkResult VmaAllocator_T::CheckCorruption(uint32_t memoryTypeBits)
     return finalRes;
 }
 
-VkResult VmaAllocator_T::AllocateVulkanMemory(const VkMemoryAllocateInfo* pAllocateInfo, VkDeviceMemory* pMemory)
+VkResult VmaAllocator_T::AllocateVulkanMemory(const VkMemoryAllocateInfo* pAllocateInfo, VkDeviceMemory* pMemory, float const priority)
 {
     AtomicTransactionalIncrement<uint32_t> deviceMemoryCountIncrement;
     const uint64_t prevDeviceMemoryCount = deviceMemoryCountIncrement.Increment(&m_DeviceMemoryCount);
@@ -15430,7 +15440,13 @@ VkResult VmaAllocator_T::AllocateVulkanMemory(const VkMemoryAllocateInfo* pAlloc
 #if VMA_MEMORY_BUDGET
         ++m_Budget.m_OperationsSinceBudgetFetch;
 #endif
-
+        // [VK_EXT_pageable_device_local_memory]
+        // add higher priority so that device-local memory is less likely to be paged out by the os. 
+        if (m_UseExtMemoryPriority) {
+            (*m_VulkanFunctions.vkSetDeviceMemoryPriorityEXT)(m_hDevice, *pMemory, priority);
+        }
+        // [VK_EXT_pageable_device_local_memory]
+        
         // Informative callback.
         if(m_DeviceMemoryCallbacks.pfnAllocate != VMA_NULL)
         {
