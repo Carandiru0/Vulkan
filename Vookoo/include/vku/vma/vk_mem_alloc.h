@@ -130,6 +130,8 @@ extern "C" {
     #include <vulkan/vulkan.h>
 #endif
 
+#pragma intrinsic(memset)
+
 #if !defined(VMA_VULKAN_VERSION)
     #if defined(VK_VERSION_1_3)
         #define VMA_VULKAN_VERSION 1003000
