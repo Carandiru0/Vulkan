@@ -139,7 +139,7 @@
       <FloatingPointExceptions>false</FloatingPointExceptions>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <CallingConvention>Cdecl</CallingConvention>
-      <AdditionalOptions>/D_WIN32_WINNT=0x0A00 /GA /Gw /clang:-ffast-math /clang:-ffp-contract=fast /clang:-fdenormal-fp-math=positive-zero /clang:-mavx2 /clang:-mfma %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/D_WIN32_WINNT=0x0A00 /GA /Gw /clang:-Ofast /clang:-ffast-math /clang:-ffp-contract=fast /clang:-fdenormal-fp-math=positive-zero /clang:-ffp-exception-behavior=ignore /clang:-fno-math-errno /clang:-fno-trapping-math /clang:-funsafe-math-optimizations /clang:-ftree-vectorize /clang:-mvzeroupper /clang:-mavx2 /clang:-mfma /clang:-mbmi /clang:-mbmi2 /clang:-march=native %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <IntelJCCErratum>
       </IntelJCCErratum>

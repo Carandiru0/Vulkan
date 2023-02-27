@@ -77,8 +77,8 @@ namespace vku {
 		ACCESS_READWRITE(1),
 		ACCESS_WRITEONLY(-1);
 
-	STATIC_INLINE_PURE point2D_t const __vectorcall getDownResolution(point2D_t const frameBufferSz) {   // Downscaled resolution is always 50% of original resolution ** Half Resolution is almost identical, Third resolution is close but you can tell, Quarter resolution you can start to see the blockyness
-		return(p2D_shiftr(frameBufferSz, 1));
+	STATIC_INLINE_PURE point2D_t const __vectorcall getDownResolution(point2D_t const frameBufferSz) {   // Downscaled resolution is always 75% of original resolution ** Half Resolution is almost identical, Third resolution is close but you can tell, Quarter resolution you can start to see the blockyness
+		return(p2D_muls(p2D_shiftr(frameBufferSz, 2), 3)); // must match depthresolve.frag               // 75% is chosen close to the inputs used in https://gpuopen.com/fidelityfx-superresolution/ (another upscaler)
 	}
 
 	BETTER_ENUM(eCheckerboard, uint32_t const,
