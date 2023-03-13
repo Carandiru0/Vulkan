@@ -173,6 +173,7 @@ namespace vku {
 		bool async_compute_enabled;
 		
 		vk::RenderPassBeginInfo&& __restrict rpbiZ;
+		vk::RenderPassBeginInfo&& __restrict rpbiG;
 		vk::RenderPassBeginInfo&& __restrict rpbiHalf;
 		vk::RenderPassBeginInfo&& __restrict rpbiFull;
 		vk::RenderPassBeginInfo&& __restrict rpbiMid;

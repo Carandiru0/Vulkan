@@ -572,7 +572,7 @@ private:
 
 								           
 BETTER_ENUM(eCommandPools, uint32_t const, DEFAULT_POOL = 0, OVERLAY_POOL, TRANSIENT_POOL, DMA_TRANSFER_POOL_PRIMARY, DMA_TRANSFER_POOL_SECONDARY, COMPUTE_POOL);
-BETTER_ENUM(eFrameBuffers, uint32_t const, DEPTH, HALF_COLOR_ONLY, FULL_COLOR_ONLY, MID_COLOR_DEPTH, COLOR_DEPTH, OVERLAY, POSTAA_0, POSTAA_1, POSTAA_2, PRESENT, CLEAR, OFFSCREEN);
+BETTER_ENUM(eFrameBuffers, uint32_t const, DEPTH, GBUFFER, HALF_COLOR_ONLY, FULL_COLOR_ONLY, MID_COLOR_DEPTH, COLOR_DEPTH, OVERLAY, POSTAA_0, POSTAA_1, POSTAA_2, PRESENT, CLEAR, OFFSCREEN);
 BETTER_ENUM(eOverlayBuffers, uint32_t const, TRANSFER, RENDER);
 BETTER_ENUM(eComputeBuffers, uint32_t const, TRANSFER, TRANSFER_LIGHT, COMPUTE_LIGHT);
 
@@ -1249,11 +1249,12 @@ public:
 			 
 		   });
 	  }
-	  // Build the renderpass using two attachments, colour and depth/stencil. (regular rendering pass)
+
+	  // Z - Pass
 	  {
 		  vku::RenderpassMaker rpm;
 
-		  // **** SUBPASS 0 - Regular rendering - ZONLY No Color Writes & Clear Masks Alpha Writes (1st color attachment) //
+		  // **** SUBPASS 0 - Regular rendering - ZONLY No Color Writes //
 		 
 		  // The depth/stencil attachment.
 		  rpm.attachmentBegin(depthImage_.format());		// 0
@@ -1263,9 +1264,112 @@ public:
 		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eClear);
 		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
 		  rpm.attachmentInitialLayout(vk::ImageLayout::eUndefined);					// undefined should be used to reset beginning state if load op is clear
-		  rpm.attachmentFinalLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
+		  rpm.attachmentFinalLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal); // transition to eDepthStencilReadOnlyOptimal for final layout happens in subpass 1
 
-		  // The first colour attachment. (only alpha writes enabled in zpass for clearmasks)
+		  // A subpass to render using the above attachment
+		  rpm.subpassBegin(vk::PipelineBindPoint::eGraphics);
+		  rpm.subpassDepthStencilAttachment(vk::ImageLayout::eDepthStencilAttachmentOptimal, 0);	// optimal format (read/write) during subpass
+
+		  // **** SUBPASS 1 - Depth buffer custom resolve //
+
+		  // The depth/stencil attachment.
+		  rpm.attachmentBegin(depthImage_.format());		// 1
+		  rpm.attachmentSamples(vku::DefaultSampleCount);
+		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eLoad);
+		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eStore);
+		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
+		  rpm.attachmentInitialLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
+		  rpm.attachmentFinalLayout(vk::ImageLayout::eDepthStencilReadOnlyOptimal);	// depth shall remain readonly for the rest of the frame
+
+		  // The only colour attachment.
+		  rpm.attachmentBegin(depthImageResolve_[0].format());		// 2
+		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);
+		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eDontCare);
+		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eStore);
+		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
+		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
+		  rpm.attachmentInitialLayout(vk::ImageLayout::eUndefined);
+		  rpm.attachmentFinalLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+
+		  // A subpass to render using the above two attachments.
+		  rpm.subpassBegin(vk::PipelineBindPoint::eGraphics);
+		  rpm.subpassInputAttachment(vk::ImageLayout::eDepthStencilReadOnlyOptimal, 1);
+		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 2);
+	
+		  // A dependency to reset the layout of both attachments.
+		  rpm.dependencyBegin(VK_SUBPASS_EXTERNAL, 0);
+		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
+		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
+		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentWrite);
+		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite);
+		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
+		  					
+		  // *bugfix - load op for depth attachment requires transition [memory_read] due to LOAD_OP_LOAD, with last subpass its an external dependency somehow, possibly because LOAD_OP_LOAD doesn't know what it's loading. It cannot assume its the depth buffer from the previous subpass.
+		  //           however here we define that dependency to remove the read after write hazard reported by synchronization validation.
+		  rpm.dependencyBegin(VK_SUBPASS_EXTERNAL, 1);
+		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
+		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eTopOfPipe);
+		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentWrite);
+		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eMemoryRead);
+		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
+		
+		  rpm.dependencyBegin(0, 1);
+		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
+		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eFragmentShader);
+		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite);
+		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eInputAttachmentRead);
+		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
+		
+		  rpm.dependencyBegin(1, VK_SUBPASS_EXTERNAL);
+		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eFragmentShader);
+		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
+		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eInputAttachmentRead);
+		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
+
+		  rpm.dependencyBegin(1, VK_SUBPASS_EXTERNAL);
+		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eFragmentShader);
+		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
+		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eInputAttachmentRead);
+		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentRead); // remains in read-only state for remainder of frame, all opaque depth writes completed. depth testing is ok, no depth writes after this. The attachment must not be transitioned to any other state then what this final transition has. 
+		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
+
+		  // Use the maker object to construct the vulkan object
+		  zPass_ = rpm.createUnique(device);
+
+		  VKU_SET_OBJECT_NAME(vk::ObjectType::eRenderPass, (VkRenderPass)*zPass_, vkNames::Renderpass::ZPASS);
+	  }
+
+	  framebuffers_[eFrameBuffers::DEPTH] = new vk::UniqueFramebuffer[double_buffer_count];
+	  for (int i = 0; i != double_buffer_count; ++i) {
+		  vk::ImageView const attachments[3] = { depthImage_.imageView()/*cleared*/, 
+												 depthImage_.imageView(), depthImageResolve_[0].imageView()
+											   };
+		  vk::FramebufferCreateInfo const fbci{ {}, *zPass_, _countof(attachments), attachments, width_, height_, 1 };
+		  framebuffers_[eFrameBuffers::DEPTH][i] = std::move(device.createFramebufferUnique(fbci).value);
+
+		  VKU_SET_OBJECT_NAME(vk::ObjectType::eFramebuffer, (VkFramebuffer)*framebuffers_[eFrameBuffers::DEPTH][i], vkNames::FrameBuffer::DEPTH);
+	  }
+
+
+
+	  // G - Pass
+	  {
+		  vku::RenderpassMaker rpm;
+
+		  // **** SUBPASS 0 - Regular rendering - Mouse, Normal & Main Alpha - Clear Masks Alpha Writes (1st color attachment) //
+
+		  // The depth/stencil attachment.
+		  rpm.attachmentBegin(depthImage_.format());		// 0
+		  rpm.attachmentSamples(vku::DefaultSampleCount);
+		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eLoad);
+		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eStore); // read only access
+		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
+		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
+		  rpm.attachmentInitialLayout(vk::ImageLayout::eDepthStencilReadOnlyOptimal);
+		  rpm.attachmentFinalLayout(vk::ImageLayout::eDepthStencilReadOnlyOptimal);	// depth shall remain readonly for the rest of the frame
+
+		  // The first colour attachment. (only alpha writes enabled in gpass for clearmasks)
 		  rpm.attachmentBegin(colorImage_.format());	   // 1
 		  rpm.attachmentSamples(vku::DefaultSampleCount);
 		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eClear);
@@ -1276,11 +1380,11 @@ public:
 		  rpm.attachmentFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);
 
 		  // The second colour attachment.				     		// 2
-		  rpm.attachmentBegin(mouseImage_.multisampled.format()); 
-		  rpm.attachmentSamples(vku::DefaultSampleCount);								  
-		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eClear);							  
+		  rpm.attachmentBegin(mouseImage_.multisampled.format());
+		  rpm.attachmentSamples(vku::DefaultSampleCount);
+		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eClear);
 		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eDontCare);		// not required to store - multisampled image is fully transient for this *renderpass*
-		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare); 
+		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
 		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
 		  rpm.attachmentInitialLayout(vk::ImageLayout::eUndefined);
 		  rpm.attachmentFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);
@@ -1317,7 +1421,7 @@ public:
 
 		  // A subpass to render using the above attachment
 		  rpm.subpassBegin(vk::PipelineBindPoint::eGraphics);
-		  rpm.subpassDepthStencilAttachment(vk::ImageLayout::eDepthStencilAttachmentOptimal, 0);	// optimal format (read/write) during subpass
+		  rpm.subpassDepthStencilAttachment(vk::ImageLayout::eDepthStencilReadOnlyOptimal, 0);	// optimal format (read only) during subpass
 		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 1);
 		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 2);
 		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 3);
@@ -1325,41 +1429,14 @@ public:
 		  rpm.subpassResolveAttachment(vk::ImageLayout::eColorAttachmentOptimal, 4);
 		  rpm.subpassResolveAttachment(vk::ImageLayout::eColorAttachmentOptimal, 5);
 
-		  // **** SUBPASS 1 - Depth buffer custom resolve //
-
-		  // The depth/stencil attachment.
-		  rpm.attachmentBegin(depthImage_.format());		// 6
-		  rpm.attachmentSamples(vku::DefaultSampleCount);
-		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eLoad);
-		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eDontCare); // read only access
-		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
-		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
-		  rpm.attachmentInitialLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
-		  rpm.attachmentFinalLayout(vk::ImageLayout::eDepthStencilReadOnlyOptimal);	// depth shall remain readonly for the rest of the frame
-
-		  // The only colour attachment.
-		  rpm.attachmentBegin(depthImageResolve_[0].format());		// 7
-		  rpm.attachmentSamples(vk::SampleCountFlagBits::e1);
-		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eDontCare);
-		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eStore);
-		  rpm.attachmentStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
-		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
-		  rpm.attachmentInitialLayout(vk::ImageLayout::eUndefined);
-		  rpm.attachmentFinalLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
-
-		  // A subpass to render using the above two attachments.
-		  rpm.subpassBegin(vk::PipelineBindPoint::eGraphics);
-		  rpm.subpassInputAttachment(vk::ImageLayout::eDepthStencilReadOnlyOptimal, 6);
-		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 7);
-	
 		  // A dependency to reset the layout of both attachments.
 		  rpm.dependencyBegin(VK_SUBPASS_EXTERNAL, 0);
 		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
 		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
-		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentWrite);
-		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite);
+		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentRead);
+		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentRead);
 		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
-		
+
 		  rpm.dependencyBegin(VK_SUBPASS_EXTERNAL, 0);
 		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eTopOfPipe);
 		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
@@ -1367,41 +1444,11 @@ public:
 		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
 		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
 
-		  rpm.dependencyBegin(VK_SUBPASS_EXTERNAL, 1);
-		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eTopOfPipe);
-		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
-		  rpm.dependencySrcAccessMask((vk::AccessFlags)0);
-		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
-		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
-		  					
-		  // *bugfix - load op for depth attachment requires transition [memory_read] due to LOAD_OP_LOAD, with last subpass its an external dependency somehow, possibly because LOAD_OP_LOAD doesn't know what it's loading. It cannot assume its the depth buffer from the previous subpass.
-		  //           however here we define that dependency to remove the read after write hazard reported by synchronization validation.
-		  rpm.dependencyBegin(VK_SUBPASS_EXTERNAL, 1);
-		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
-		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eTopOfPipe);
-		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentWrite);
-		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eMemoryRead);
-		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
-		
-		  rpm.dependencyBegin(0, 1);
-		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
-		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eFragmentShader);
-		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite);
-		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eInputAttachmentRead);
-		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
-		
-		  rpm.dependencyBegin(1, VK_SUBPASS_EXTERNAL);
+		  rpm.dependencyBegin(0, VK_SUBPASS_EXTERNAL);
 		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
-		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eFragmentShader);
+		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
 		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
-		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eInputAttachmentRead);
-		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
-
-		  rpm.dependencyBegin(1, VK_SUBPASS_EXTERNAL);
-		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eFragmentShader);
-		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
-		  rpm.dependencySrcAccessMask(vk::AccessFlagBits::eInputAttachmentRead);
-		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentRead); // remains in read-only state for remainder of frame, all opaque depth writes completed. depth testing is ok, no depth writes after this. The attachment must not be transitioned to any other state then what this final transition has. 
+		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
 		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
 
 		  // mouse resolve
@@ -1421,22 +1468,23 @@ public:
 		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
 
 		  // Use the maker object to construct the vulkan object
-		  zPass_ = rpm.createUnique(device);
+		  gPass_ = rpm.createUnique(device);
 
-		  VKU_SET_OBJECT_NAME(vk::ObjectType::eRenderPass, (VkRenderPass)*zPass_, vkNames::Renderpass::ZPASS);
+		  VKU_SET_OBJECT_NAME(vk::ObjectType::eRenderPass, (VkRenderPass)*gPass_, vkNames::Renderpass::GPASS);
 	  }
 
-	  framebuffers_[eFrameBuffers::DEPTH] = new vk::UniqueFramebuffer[double_buffer_count];
+	  framebuffers_[eFrameBuffers::GBUFFER] = new vk::UniqueFramebuffer[double_buffer_count];
 	  for (int i = 0; i != double_buffer_count; ++i) {
-		  vk::ImageView const attachments[8] = { depthImage_.imageView()/*cleared*/, colorImage_.imageView()/*cleared*/, mouseImage_.multisampled.imageView()/*cleared*/, normalImage_.multisampled.imageView()/*cleared*/, 
-			                                     mouseImage_.resolved.imageView(), normalImage_.resolved.imageView(),
-												 depthImage_.imageView(), depthImageResolve_[0].imageView()
-											   };
-		  vk::FramebufferCreateInfo const fbci{ {}, *zPass_, _countof(attachments), attachments, width_, height_, 1 };
-		  framebuffers_[eFrameBuffers::DEPTH][i] = std::move(device.createFramebufferUnique(fbci).value);
+		  vk::ImageView const attachments[6] = { depthImage_.imageView(), colorImage_.imageView()/*cleared*/, mouseImage_.multisampled.imageView()/*cleared*/, normalImage_.multisampled.imageView()/*cleared*/,
+												 mouseImage_.resolved.imageView(), normalImage_.resolved.imageView()
+		  };
+		  vk::FramebufferCreateInfo const fbci{ {}, *gPass_, _countof(attachments), attachments, width_, height_, 1 };
+		  framebuffers_[eFrameBuffers::GBUFFER][i] = std::move(device.createFramebufferUnique(fbci).value);
 
-		  VKU_SET_OBJECT_NAME(vk::ObjectType::eFramebuffer, (VkFramebuffer)*framebuffers_[eFrameBuffers::DEPTH][i], vkNames::FrameBuffer::DEPTH);
+		  VKU_SET_OBJECT_NAME(vk::ObjectType::eFramebuffer, (VkFramebuffer)*framebuffers_[eFrameBuffers::GBUFFER][i], vkNames::FrameBuffer::GBUFFER);
 	  }
+
+
 
 	  //  (down - rezzed - resolution pass) **vku::DOWN_RES_FACTOR sets resolution factor of framebuffer
 	  {
@@ -1552,7 +1600,6 @@ public:
 		  VKU_SET_OBJECT_NAME(vk::ObjectType::eFramebuffer, (VkFramebuffer)*framebuffers_[eFrameBuffers::HALF_COLOR_ONLY][i], vkNames::FrameBuffer::HALF_COLOR_ONLY);
 	  }
 
-	  
 	  //  (up - rezzed - resolution pass)
 	  {
 		  vku::RenderpassMaker rpm;
@@ -2401,18 +2448,24 @@ public:
 
 	  // alpha channel ust atleast be cleared to 1 for transparency "clear masks"
 	  // it is faster to clear all channels to 1 or 0
-	  constinit static vk::ClearValue const clearArray_zPass[] = { vk::ClearDepthStencilValue{1.0f, 0}, vk::ClearColorValue{ std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}}, vk::ClearColorValue{ std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}}, vk::ClearColorValue{ std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}}, {}, {}, {}, {} };
-	  constinit static vk::ClearValue const clear_offscreenPass{ vk::ClearColorValue{ std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}} };  // require opaque alpha, no alpha component writes in voxel shader due to clear masks
+	  constinit static vk::ClearValue const clearArray_zPass[] = { vk::ClearDepthStencilValue{1.0f, 0}, {}, {} };                  // note: no longer requires opaque alpha for clearmasks
+	  constinit static vk::ClearValue const clearArray_gPass[] = { {}, vk::ClearColorValue{ std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}}, vk::ClearColorValue{ std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}}, vk::ClearColorValue{ std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}}, {}, {} };
+	  constinit static vk::ClearValue const clear_offscreenPass{ vk::ClearColorValue{ std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}} };  
 	  
 	  point2D const frameBufferSz(width_, height_);
 	  point2D_t const downResFrameBufferSz(vku::getDownResolution(frameBufferSz));
 
-	  vk::RenderPassBeginInfo rpbi[6];
+	  vk::RenderPassBeginInfo rpbi[7];
 
 	  rpbi[eFrameBuffers::DEPTH].renderPass = *zPass_;
 	  rpbi[eFrameBuffers::DEPTH].renderArea = vk::Rect2D{ {0, 0}, {width_, height_} };
 	  rpbi[eFrameBuffers::DEPTH].clearValueCount = (uint32_t)_countof(clearArray_zPass);
 	  rpbi[eFrameBuffers::DEPTH].pClearValues = clearArray_zPass;
+
+	  rpbi[eFrameBuffers::GBUFFER].renderPass = *gPass_;
+	  rpbi[eFrameBuffers::GBUFFER].renderArea = vk::Rect2D{ {0, 0}, {width_, height_} };
+	  rpbi[eFrameBuffers::GBUFFER].clearValueCount = (uint32_t)_countof(clearArray_gPass);
+	  rpbi[eFrameBuffers::GBUFFER].pClearValues = clearArray_gPass;
 
 	  rpbi[eFrameBuffers::HALF_COLOR_ONLY].renderPass = *downPass_;
 	  rpbi[eFrameBuffers::HALF_COLOR_ONLY].renderArea = vk::Rect2D{ {0, 0}, {uint32_t(downResFrameBufferSz.x), uint32_t(downResFrameBufferSz.y)} };
@@ -2444,6 +2497,7 @@ public:
 		  for (uint32_t image_index = 0; image_index != staticDrawBuffers_.size(); ++image_index) {
 			  vk::CommandBuffer const cb = *staticDrawBuffers_.cb[0][image_index];
 			  rpbi[eFrameBuffers::DEPTH].framebuffer			= *framebuffers_[eFrameBuffers::DEPTH][image_index];
+			  rpbi[eFrameBuffers::GBUFFER].framebuffer          = *framebuffers_[eFrameBuffers::GBUFFER][image_index];
 			  rpbi[eFrameBuffers::HALF_COLOR_ONLY].framebuffer  = *framebuffers_[eFrameBuffers::HALF_COLOR_ONLY][image_index];
 			  rpbi[eFrameBuffers::FULL_COLOR_ONLY].framebuffer  = *framebuffers_[eFrameBuffers::FULL_COLOR_ONLY][image_index];
 			  rpbi[eFrameBuffers::MID_COLOR_DEPTH].framebuffer  = *framebuffers_[eFrameBuffers::MID_COLOR_DEPTH][image_index];
@@ -2451,7 +2505,8 @@ public:
 			  rpbi[OFFSCREEN_OFFSET].framebuffer				= *framebuffers_[eFrameBuffers::OFFSCREEN][image_index];
 
 			  static_function(std::forward<static_renderpass&& __restrict>({ cb, image_index, async_compute_enabled,
-				  std::move(rpbi[eFrameBuffers::DEPTH]), 
+				  std::move(rpbi[eFrameBuffers::DEPTH]),
+				  std::move(rpbi[eFrameBuffers::GBUFFER]),
 				  std::move(rpbi[eFrameBuffers::HALF_COLOR_ONLY]), 
 				  std::move(rpbi[eFrameBuffers::FULL_COLOR_ONLY]), 
 				  std::move(rpbi[eFrameBuffers::MID_COLOR_DEPTH]), 
@@ -2466,6 +2521,7 @@ public:
 	  else { // only the target resource of the double buffer has the command buffer set
 		  vk::CommandBuffer const cb = *staticDrawBuffers_.cb[0][iImageIndex];
 		  rpbi[eFrameBuffers::DEPTH].framebuffer			= *framebuffers_[eFrameBuffers::DEPTH][iImageIndex];
+		  rpbi[eFrameBuffers::GBUFFER].framebuffer          = *framebuffers_[eFrameBuffers::GBUFFER][iImageIndex];
 		  rpbi[eFrameBuffers::HALF_COLOR_ONLY].framebuffer  = *framebuffers_[eFrameBuffers::HALF_COLOR_ONLY][iImageIndex];
 		  rpbi[eFrameBuffers::FULL_COLOR_ONLY].framebuffer  = *framebuffers_[eFrameBuffers::FULL_COLOR_ONLY][iImageIndex];
 		  rpbi[eFrameBuffers::MID_COLOR_DEPTH].framebuffer  = *framebuffers_[eFrameBuffers::MID_COLOR_DEPTH][iImageIndex];
@@ -2474,6 +2530,7 @@ public:
 
 		  static_function(std::forward<static_renderpass&& __restrict>({ cb, (uint32_t const)iImageIndex, async_compute_enabled,
 			  std::move(rpbi[eFrameBuffers::DEPTH]), 
+			  std::move(rpbi[eFrameBuffers::GBUFFER]),
 			  std::move(rpbi[eFrameBuffers::HALF_COLOR_ONLY]), 
 			  std::move(rpbi[eFrameBuffers::FULL_COLOR_ONLY]), 
 			  std::move(rpbi[eFrameBuffers::MID_COLOR_DEPTH]),
@@ -2977,6 +3034,7 @@ public:
 
   /// Return the renderpass used by this window.
   vk::RenderPass const& __restrict zPass() const { return(*zPass_); }
+  vk::RenderPass const& __restrict gPass() const { return(*gPass_); }
   vk::RenderPass const& __restrict downPass() const { return(*downPass_); }
   vk::RenderPass const& __restrict upPass() const { return(*upPass_); }
   vk::RenderPass const& __restrict midPass() const { return(*midPass_); }
@@ -3114,7 +3172,7 @@ private:
   vk::Instance instance_;
   vk::SurfaceKHR surface_;
   vk::UniqueSwapchainKHR swapchain_;
-  vk::UniqueRenderPass zPass_, downPass_, upPass_, midPass_, transPass_, overlayPass_, postAAPass_[3], finalPass_, clearPass_, offscreenPass_;
+  vk::UniqueRenderPass zPass_, gPass_, downPass_, upPass_, midPass_, transPass_, overlayPass_, postAAPass_[3], finalPass_, clearPass_, offscreenPass_;
   
   struct semaphores {
 	  vk::UniqueSemaphore staticCompleteSemaphore_;

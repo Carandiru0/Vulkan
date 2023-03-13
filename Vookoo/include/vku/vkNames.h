@@ -29,6 +29,7 @@ namespace vkNames
 		[[maybe_unused]] static inline constexpr char const* const MID_COLOR_DEPTH = "[fb] Mid Color Depth";
 		[[maybe_unused]] static inline constexpr char const* const FULL_COLOR_ONLY = "[fb] Full Color Only";
 		[[maybe_unused]] static inline constexpr char const* const HALF_COLOR_ONLY = "[fb] Half Color Only";
+		[[maybe_unused]] static inline constexpr char const* const GBUFFER = "[fb] G-Buffer";
 		[[maybe_unused]] static inline constexpr char const* const DEPTH = "[fb] Depth";
 	}
 
@@ -43,7 +44,8 @@ namespace vkNames
 		[[maybe_unused]] static inline constexpr char const* const MIDPASS = "[rp] Mid";
 		[[maybe_unused]] static inline constexpr char const* const UPPASS = "[rp] Up";
 		[[maybe_unused]] static inline constexpr char const* const DOWNPASS = "[rp] Down";
-		[[maybe_unused]] static inline constexpr char const* const ZPASS = "[rp] Z";
+		[[maybe_unused]] static inline constexpr char const* const GPASS = "[rp] G Pass";
+		[[maybe_unused]] static inline constexpr char const* const ZPASS = "[rp] Z Pass";
 	}
 
 	namespace Queue
