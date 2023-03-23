@@ -2660,7 +2660,7 @@ public:
 		  return(true);
       }
 
-	  void presentation(const vk::Device& __restrict device, vk::Semaphore& __restrict ccSema, uint32_t& __restrict imageIndex)
+	  void presentation(const vk::Device& __restrict device, vk::Semaphore& __restrict ccSema, vk::Semaphore& __restrict iaSema, uint32_t& __restrict imageIndex)
 	  {
 		  // clears - *bugfix - added command buffer to presentation queue submission, if done after right present there is a long wait for its queue submission (nvidia nsight)
 		  // eaxct same submission parameters so refactored to one queue submission for both command buffers //
@@ -2685,12 +2685,14 @@ public:
 		  }
 
 		  // ######## Present *currentframe* //
+		  vk::Semaphore const iaccSema[2] = { iaSema, ccSema };
+
 		  vk::PresentInfoKHR presentInfo{};
 		  presentInfo.pSwapchains = &(*swapchain_);
 		  presentInfo.swapchainCount = 1;
 		  presentInfo.pImageIndices = &imageIndex;
-		  presentInfo.waitSemaphoreCount = 1;
-		  presentInfo.pWaitSemaphores = &ccSema;		// waiting on completion 
+		  presentInfo.waitSemaphoreCount = 2;
+		  presentInfo.pWaitSemaphores = iaccSema;		// waiting on completion 
 		  _presentResult = graphicsQueue_.presentKHR(presentInfo);		// submit/present to screen queue
 
 		  // clearing part can execute independently from the present, present is not dependent on these clears which prepare the opacity volume for next frame.
@@ -2813,7 +2815,7 @@ public:
 				submit.signalSemaphoreCount = (uint32_t)async_compute_enabled;
 				submit.pSignalSemaphores = &tcSema[0];		// signal for compute
 
-				transferQueue_[resource_index].submit(1, &submit, dma_transfer_fence);
+				transferQueue_[!resource_index].submit(1, &submit, dma_transfer_fence); // *other* transfer queue
 
 				computeDrawBuffers_.queued[eComputeBuffers::TRANSFER][resource_index] = true;
 
@@ -2821,7 +2823,7 @@ public:
 				computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = async_compute_enabled;
 			}
 		}
-		if (async_compute_enabled) { // [compute]
+		[[likely]] if (async_compute_enabled) { // [compute]
 			
 			vk::CommandBuffer const compute_process[3] = { nullptr, nullptr, *computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_LIGHT][resource_index] };
 
@@ -2835,7 +2837,7 @@ public:
 			// compute light
 			async_compute_enabled = gpu_compute(std::forward<compute_pass&& __restrict>({ compute_process[eComputeBuffers::TRANSFER], compute_process[eComputeBuffers::TRANSFER_LIGHT], compute_process[eComputeBuffers::COMPUTE_LIGHT], resource_index, transferQueueFamilyIndex(), computeQueueFamilyIndex(), graphicsQueueFamilyIndex(), async_compute_enabled }));    // compute part resets the dirty state that transfer set
 
-			if (async_compute_enabled)
+			[[likely]] if (async_compute_enabled)
 			{
 				vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eComputeShader };
 				vk::SubmitInfo submit{};
@@ -2851,14 +2853,6 @@ public:
 
 				computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index] = true;
 			}
-		}
-		
-		constinit static bool async_compute_enabled_last(false);
-		
-		if (async_compute_enabled != async_compute_enabled_last) {
-			
-			setStaticCommandsDirty(); // trigger update required
-			async_compute_enabled_last = async_compute_enabled;
 		}
 	}
 
@@ -2889,7 +2883,7 @@ public:
 		submit.signalSemaphoreCount = 1;
 		submit.pSignalSemaphores = &tcSema[1];			// signal for dynamic cb in slot 0, signal for overlay dynamic cb in slot 1 (completion)
 
-		transferQueue_[!resource_index].submit(1, &submit, overlay_dynamic_fence[1]); // <---- this is opposite transfer queue on purpose so dma transfers are simultaneous
+		transferQueue_[resource_index].submit(1, &submit, overlay_dynamic_fence[1]); // *main* transfer queue
 	}
 
 		//----// COMPUTE SUBMIT [[deprecated]] (TEXTURESHADERS)// // **waiting on nothing
@@ -2929,13 +2923,13 @@ public:
 	// ANY WORK THAT CAN BE DONE (COMPUTE, TRANSFERS, ANYTHING THAT DOES NOT DEPEND ON IMAGEINDEX) SHOULD BE DONE ABOVE //
 	//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%//
 	uint32_t imageIndex(0);
-	vk::Semaphore iaSema;
+	vk::Semaphore iaSema; // *bugfix - only needs semaphore wait on input acquire on final presentation to swapchain image queue submission
 	[[unlikely]] if (!presentation_acquire(device, iaSema, imageIndex, resource_index))
 		return(resource_index); // doesn't change resource_index on failure in normal path (frames 0 & 1)
 
 	//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%//
 	
-	vk::Semaphore const iatccSema[3] = { tcSema[1], iaSema, cSema };
+	vk::Semaphore const tccSema[2] = { tcSema[1], cSema };
 	vk::Semaphore const staticSema = *semaphores[imageIndex].staticCompleteSemaphore_;
 	
 	{ // graphics path
@@ -2950,11 +2944,11 @@ public:
 			device.resetFences(static_fence);
 			
 			vk::CommandBuffer const cb(*staticDrawBuffers_.cb[0][imageIndex]);
-			vk::PipelineStageFlags waitStages[3] = { vk::PipelineStageFlagBits::eVertexInput, vk::PipelineStageFlagBits::eFragmentShader, vk::PipelineStageFlagBits::eTopOfPipe }; // wait at stage data is required
+			vk::PipelineStageFlags waitStages[2] = { vk::PipelineStageFlagBits::eVertexInput, vk::PipelineStageFlagBits::eTopOfPipe }; // wait at stage data is required
 
 			vk::SubmitInfo submit{};
-			submit.waitSemaphoreCount = 2 + (uint32_t)async_compute_enabled;
-			submit.pWaitSemaphores = iatccSema;		// waiting on dynamic transfer & input acquire & compute processing (both texture and light)
+			submit.waitSemaphoreCount = 1 + (uint32_t)async_compute_enabled;
+			submit.pWaitSemaphores = tccSema;		// waiting on dynamic transfer & compute processing (both texture and light)
 			submit.pWaitDstStageMask = waitStages;
 			submit.commandBufferCount = 1;
 			submit.pCommandBuffers = &cb;				// submitting static cb
@@ -2986,7 +2980,7 @@ public:
 			submit.pSignalSemaphores = nullptr;
 
 			// have to wait on associatted fence, and reset for next iteration
-			transferQueue_[resource_index].submit(1, &submit, cbFenceReadback);
+			transferQueue_[!resource_index].submit(1, &submit, cbFenceReadback); // *other* transfer queue
 		}
 
 		//	graphics
@@ -3019,7 +3013,7 @@ public:
 		//	graphics
 		// 	   |
 		// 	graphics
-		presentation(device, *commandCompleteSemaphore_[imageIndex], imageIndex);
+		presentation(device, *commandCompleteSemaphore_[imageIndex], iaSema, imageIndex);
 	}
 	// swapping resources
 	resource_index = !resource_index;
