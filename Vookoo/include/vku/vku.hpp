@@ -1418,7 +1418,7 @@ public:
 	
 	vk::PipelineShaderStageRequiredSubgroupSizeCreateInfoEXT fullsubgroups_info(32); // both nvidia and amd now use 32. AMD used to use 64, NVIDIA always 32. So for best compatibility set the subgroup size to the new standard ( 32 ). Now it's consistent on AMD & NVIDIA.
 	if (fullsubgroups_supported) {
-		stage_.flags = vk::PipelineShaderStageCreateFlagBits::eAllowVaryingSubgroupSizeEXT | vk::PipelineShaderStageCreateFlagBits::eRequireFullSubgroupsEXT; // only for compute shaders, require full subgroups
+		stage_.flags = vk::PipelineShaderStageCreateFlagBits::eRequireFullSubgroupsEXT; // only for compute shaders, require full subgroups
 		stage_.pNext = &fullsubgroups_info;
 	}
 
@@ -2066,7 +2066,7 @@ public:
 
 class IndirectBuffer : public GenericBuffer {
 public:
-	IndirectBuffer() {
+	constexpr IndirectBuffer() {
 	}
 
 	IndirectBuffer(size_t const size, bool const bDedicatedMemory = false)

@@ -159,7 +159,9 @@ public:
 		}
 		return;
 	}
-    auto qprops = physical_device_.getQueueFamilyProperties();
+
+	// 1 graphics (main) queue, at least 1 compute queue & at least 2 transfer queues *required* (99.9% of all gpu's support, may actually be 100%)   *bugfix - removed uneccessary 2 compute queues, only require 1. still requiring that there are at least 2 transfer queues.
+    auto const qprops = physical_device_.getQueueFamilyProperties();
     
     graphicsQueueFamilyIndex_ = 0;
     computeQueueFamilyIndex_ = 0;
@@ -183,7 +185,7 @@ public:
 	uint32_t lastGranularity(0);
 
     for (int32_t qi = (int32_t)qprops.size() - 1; qi >= 0; --qi) {	// start from back to capture unique queues first
-      auto &qprop = qprops[qi];
+      auto const& qprop = qprops[qi];
 
       if (searchGraphics && (qprop.queueFlags & searchGraphics) == searchGraphics) {
 			graphicsQueueFamilyIndex_ = qi;
@@ -192,7 +194,7 @@ public:
 			}
 			FMT_LOG_OK(GPU_LOG, "Graphics Queue Selected < {:s} {:d} >", vk::to_string(qprop.queueFlags), graphicsQueueFamilyIndex_);
       }
-	  if (searchCompute && ((qprop.queueFlags & searchCompute) == searchCompute) && qprop.queueCount >= 2) { // also ensure there is 2 available compute queues
+	  if (searchCompute && ((qprop.queueFlags & searchCompute) == searchCompute) ) {
 		  computeQueueFamilyIndex_ = qi;
 		  searchCompute = (vk::QueueFlagBits)0; // prevent further search
 		  FMT_LOG_OK(GPU_LOG, "Compute Queue Selected < {:s} {:d} >", vk::to_string(qprop.queueFlags), computeQueueFamilyIndex_);
@@ -221,11 +223,11 @@ public:
 		  }
 	  }
     }
-	// error out if there is *not* 2 compute queues or no compute queue at all
+	// error out if there is no compute queue at all
 	if (!searchCompute) { // search found compute queue
 
-		if (!(qprops[computeQueueFamilyIndex_].queueCount >= 2)) {
-			FMT_LOG_FAIL(GPU_LOG, "Simultaneous Compute Queues not supported!!");
+		if (!(qprops[computeQueueFamilyIndex_].queueCount >= 1)) {
+			FMT_LOG_FAIL(GPU_LOG, "Compute Queue not supported!!");
 			return;
 		}
 	}
