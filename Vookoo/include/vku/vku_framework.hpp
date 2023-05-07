@@ -1154,6 +1154,7 @@ public:
 		  //  -Disadvantages:  -no hdr lighting for 8bpc pipeline, does not tonemap lighting values to 8bpc color space.
 		  //                   -hdr lighting enabled only when HDR is being used / supported by a HDR10 compatible display.
 		  //
+		  // 
 		  //  16bit HDR values are used internally, then output to HDR10 (10bit) on present as per the spec @ https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.2087-0-201510-I!!PDF-E.pdf
 		  //
 		  vk::Format pipelineFormat(isHDR() ? vk::Format::eR16G16B16A16Unorm : vk::Format::eB8G8R8A8Unorm);
@@ -1278,7 +1279,7 @@ public:
 		  rpm.attachmentBegin(depthImage_.format());		// 1
 		  rpm.attachmentSamples(vku::DefaultSampleCount);
 		  rpm.attachmentLoadOp(vk::AttachmentLoadOp::eLoad);
-		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eStore);
+		  rpm.attachmentStoreOp(vk::AttachmentStoreOp::eDontCare);
 		  rpm.attachmentStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
 		  rpm.attachmentInitialLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
 		  rpm.attachmentFinalLayout(vk::ImageLayout::eDepthStencilReadOnlyOptimal);	// depth shall remain readonly for the rest of the frame
@@ -1297,7 +1298,7 @@ public:
 		  rpm.subpassBegin(vk::PipelineBindPoint::eGraphics);
 		  rpm.subpassInputAttachment(vk::ImageLayout::eDepthStencilReadOnlyOptimal, 1);
 		  rpm.subpassColorAttachment(vk::ImageLayout::eColorAttachmentOptimal, 2);
-	
+	 
 		  // A dependency to reset the layout of both attachments.
 		  rpm.dependencyBegin(VK_SUBPASS_EXTERNAL, 0);
 		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
@@ -1315,6 +1316,14 @@ public:
 		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eMemoryRead);
 		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
 		
+		  // *bugfix - required to avoid write->write hazard, synchronization error
+		  rpm.dependencyBegin(VK_SUBPASS_EXTERNAL, 1);
+		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eTopOfPipe);
+		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+		  rpm.dependencySrcAccessMask((vk::AccessFlags)0);
+		  rpm.dependencyDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
+		  rpm.dependencyDependencyFlags(vk::DependencyFlagBits::eByRegion);
+
 		  rpm.dependencyBegin(0, 1);
 		  rpm.dependencySrcStageMask(vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
 		  rpm.dependencyDstStageMask(vk::PipelineStageFlagBits::eFragmentShader);
@@ -2667,23 +2676,23 @@ public:
 		  // clears - *bugfix - added command buffer to presentation queue submission, if done after right present there is a long wait for its queue submission (nvidia nsight)
 		  // eaxct same submission parameters so refactored to one queue submission for both command buffers //
 		  {
-			vk::Fence const cbFence{ presentDrawBuffers_.fence[0][imageIndex] }; // clear cb fence can safetly be omitted/ignored for this queue submission only requires one fence
-			device.waitForFences(cbFence, VK_TRUE, umax);
-			device.resetFences(cbFence);				// have to wait on associatted fence, and reset for next iteration
-			
-			vk::CommandBuffer const pb{ *presentDrawBuffers_.cb[0][imageIndex] }; // previously written by setStaticPresentCommands (above)
+			  vk::Fence const cbFence{ presentDrawBuffers_.fence[0][imageIndex] }; // clear cb fence can safetly be omitted/ignored for this queue submission only requires one fence
+			  device.waitForFences(cbFence, VK_TRUE, umax);
+			  device.resetFences(cbFence);				// have to wait on associatted fence, and reset for next iteration
 
-		  //----------// PRESENT (POST AA) FINAL SUBMIT // **waiting on nothing
-			vk::SubmitInfo submit{};
-			submit.waitSemaphoreCount = 0;
-			submit.pWaitSemaphores = nullptr;
-			submit.pWaitDstStageMask = 0;
-			submit.commandBufferCount = 1;
-			submit.pCommandBuffers = &pb;				// submitting presents' static cb
-			submit.signalSemaphoreCount = 1;
-			submit.pSignalSemaphores = &ccSema;			// signalling commands complete
+			  vk::CommandBuffer const pb{ *presentDrawBuffers_.cb[0][imageIndex] }; // previously written by setStaticPresentCommands (above)
 
-			graphicsQueue_.submit(1, &submit, cbFence);
+			  //----------// PRESENT (POST AA) FINAL SUBMIT // **waiting on nothing
+			  vk::SubmitInfo submit{};
+			  submit.waitSemaphoreCount = 0;
+			  submit.pWaitSemaphores = nullptr;
+			  submit.pWaitDstStageMask = 0;
+			  submit.commandBufferCount = 1;
+			  submit.pCommandBuffers = &pb;				// submitting presents' static cb
+			  submit.signalSemaphoreCount = 1;
+			  submit.pSignalSemaphores = &ccSema;			// signalling commands complete
+
+			  graphicsQueue_.submit(1, &submit, cbFence);
 		  }
 
 		  // ######## Present *currentframe* //
@@ -2703,48 +2712,20 @@ public:
 			  device.waitForFences(cbFence, VK_TRUE, umax);
 			  device.resetFences(cbFence);
 
-			  if (0 == imageIndex) { // required condition to resolve to template argument
+			  vk::CommandBuffer const cb{ *clearDrawBuffers_.cb[0][imageIndex] }; // previously written by setStaticClearCommands (above)
 
-				  async_long_task::enqueue<background_critical, 0>( // leverages unique lambda [0]
-					  // non-blocking submit
-					  [=] {
-						  vk::CommandBuffer const cb{ *clearDrawBuffers_.cb[0][imageIndex] }; // previously written by setStaticClearCommands (above)
+			  //----------//CLEAR SUBMIT // **waiting on nothing
 
-						  //----------//CLEAR SUBMIT // **waiting on nothing
+			  vk::SubmitInfo submit{};
+			  submit.waitSemaphoreCount = 0;
+			  submit.pWaitSemaphores = nullptr;
+			  submit.pWaitDstStageMask = 0;
+			  submit.commandBufferCount = 1;
+			  submit.pCommandBuffers = &cb;				// submitting presents' static cb
+			  submit.signalSemaphoreCount = 0;
+			  submit.pSignalSemaphores = nullptr;			// signalling commands complete
 
-						  vk::SubmitInfo submit{};
-						  submit.waitSemaphoreCount = 0;
-						  submit.pWaitSemaphores = nullptr;
-						  submit.pWaitDstStageMask = 0;
-						  submit.commandBufferCount = 1;
-						  submit.pCommandBuffers = &cb;				// submitting presents' static cb
-						  submit.signalSemaphoreCount = 0;
-						  submit.pSignalSemaphores = nullptr;			// signalling commands complete
-
-						  graphicsQueue_.submit(1, &submit, cbFence);
-					  });
-			  }
-			  else {
-
-				  async_long_task::enqueue<background_critical, 1>( // leverages unique lambda [1]
-					  // non-blocking submit
-					  [=] {
-						  vk::CommandBuffer const cb{ *clearDrawBuffers_.cb[0][imageIndex] }; // previously written by setStaticClearCommands (above)
-
-						  //----------//CLEAR SUBMIT // **waiting on nothing
-
-						  vk::SubmitInfo submit{};
-						  submit.waitSemaphoreCount = 0;
-						  submit.pWaitSemaphores = nullptr;
-						  submit.pWaitDstStageMask = 0;
-						  submit.commandBufferCount = 1;
-						  submit.pCommandBuffers = &cb;				// submitting presents' static cb
-						  submit.signalSemaphoreCount = 0;
-						  submit.pSignalSemaphores = nullptr;			// signalling commands complete
-
-						  graphicsQueue_.submit(1, &submit, cbFence);
-					  });
-			  }
+			  graphicsQueue_.submit(1, &submit, cbFence);
 		  }
 	  }
 
@@ -2784,6 +2765,36 @@ public:
 	vk::Semaphore const cSema{ *semaphores[resource_index].computeCompleteSemaphore_ };
 
 	vk::Fence const overlay_dynamic_fence[2]{ overlayDrawBuffers_.fence[eOverlayBuffers::TRANSFER][resource_index], dynamicDrawBuffers_.fence[0][resource_index] };   // bugfix: now properly double-buffered, no longer serializes frame by having 0 here instead of resource_index!
+
+	//----// UPLOAD & OVERLAY // // **waiting on nothing
+	{
+		device.waitForFences(2, overlay_dynamic_fence, VK_TRUE, umax);				// protect 
+		device.resetFences(2, overlay_dynamic_fence);
+
+		vk::CommandBuffer do_cb[2]{ *dynamicDrawBuffers_.cb[0][resource_index], *overlayDrawBuffers_.cb[eOverlayBuffers::TRANSFER][resource_index] };
+
+		{ // ######### begin dynamic transfer cb update (main thread)
+			// staging
+			dynamic_function(std::forward<dynamic_renderpass && __restrict>({ do_cb[0], resource_index }));	// submission of staged data to gpu
+		}
+
+		{ // ######### begin overlay transfer cb update (spawned)
+			// staging
+			overlay_function(std::forward<overlay_renderpass && __restrict>({ &do_cb[1], nullptr, resource_index, std::forward<vk::RenderPassBeginInfo && __restrict>(vk::RenderPassBeginInfo{}) }));		// submission of staged data to gpu // build transfer cb
+		}
+
+		// DYNAMIC & OVERLAY DYNAMIC SUBMIT //
+		vk::SubmitInfo submit{};
+		submit.waitSemaphoreCount = 0;
+		submit.pWaitSemaphores = nullptr;				// **waiting on nothing
+		submit.pWaitDstStageMask = nullptr;
+		submit.commandBufferCount = 2;				// submitting dynamic cb & overlay's dynamic cb
+		submit.pCommandBuffers = do_cb;
+		submit.signalSemaphoreCount = 1;
+		submit.pSignalSemaphores = &tcSema[1];			// signal for dynamic cb in slot 0, signal for overlay dynamic cb in slot 1 (completion)
+
+		transferQueue_[resource_index].submit(1, &submit, overlay_dynamic_fence[1]); // *main* transfer queue
+	}
 
 	bool async_compute_enabled(true); // *bugfix - limiting lighting updates to 33ms, 16ms introduces visible "light lag" - it must be run every frame for low-latency light changes in sync with everything else.
 	
@@ -2858,69 +2869,39 @@ public:
 		}
 	}
 
-	//----// UPLOAD & OVERLAY // // **waiting on nothing
+	//----// COMPUTE SUBMIT [[deprecated]] (TEXTURESHADERS)// // **waiting on nothing
+	/*vk::Semaphore const ctexSema = {*semaphores[resource_index].computeCompleteSemaphore_[1]};
 	{
-		device.waitForFences(2, overlay_dynamic_fence, VK_TRUE, umax);				// protect 
-		device.resetFences(2, overlay_dynamic_fence);
-		
-		vk::CommandBuffer do_cb[2]{ *dynamicDrawBuffers_.cb[0][resource_index], *overlayDrawBuffers_.cb[eOverlayBuffers::TRANSFER][resource_index] };
+	vk::CommandBuffer const compute_process[4] = { nullptr, nullptr, nullptr, *computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_TEXTURE][resource_index] };
 
-		{ // ######### begin overlay transfer cb update (spawned)
-			// staging
-			overlay_function(std::forward<overlay_renderpass&& __restrict>({ &do_cb[1], nullptr, resource_index, std::forward<vk::RenderPassBeginInfo&& __restrict>(vk::RenderPassBeginInfo{}) }));		// submission of staged data to gpu // build transfer cb
-		}
-
-		{ // ######### begin dynamic transfer cb update (main thread)
-			// staging
-			dynamic_function(std::forward<dynamic_renderpass&&>({ do_cb[0], resource_index }));	// submission of staged data to gpu
-		}
-
-		// DYNAMIC & OVERLAY DYNAMIC SUBMIT //
-		vk::SubmitInfo submit{};
-		submit.waitSemaphoreCount = 0;
-		submit.pWaitSemaphores = nullptr;				// **waiting on nothing
-		submit.pWaitDstStageMask = nullptr;
-		submit.commandBufferCount = 2;				// submitting dynamic cb & overlay's dynamic cb
-		submit.pCommandBuffers = do_cb;
-		submit.signalSemaphoreCount = 1;
-		submit.pSignalSemaphores = &tcSema[1];			// signal for dynamic cb in slot 0, signal for overlay dynamic cb in slot 1 (completion)
-
-		transferQueue_[resource_index].submit(1, &submit, overlay_dynamic_fence[1]); // *main* transfer queue
+	vk::Fence const compute_fence = computeDrawBuffers_.fence[eComputeBuffers::COMPUTE_TEXTURE][resource_index];
+	if (computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_TEXTURE][resource_index]) {
+		device.waitForFences(compute_fence, VK_TRUE, umax);
+		device.resetFences(compute_fence);
+		computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_TEXTURE][resource_index] = false; // reset
 	}
 
-		//----// COMPUTE SUBMIT [[deprecated]] (TEXTURESHADERS)// // **waiting on nothing
-		/*vk::Semaphore const ctexSema = {*semaphores[resource_index].computeCompleteSemaphore_[1]};
-		{
-		vk::CommandBuffer const compute_process[4] = { nullptr, nullptr, nullptr, *computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_TEXTURE][resource_index] };
+	gpu_compute(std::forward<compute_pass&& __restrict>({ compute_process[eComputeBuffers::TRANSFER], compute_process[eComputeBuffers::TRANSFER_LIGHT], compute_process[eComputeBuffers::COMPUTE_LIGHT], compute_process[eComputeBuffers::COMPUTE_TEXTURE], resource_index }));    // compute part resets the dirty state that transfer set
 
-		vk::Fence const compute_fence = computeDrawBuffers_.fence[eComputeBuffers::COMPUTE_TEXTURE][resource_index];
-		if (computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_TEXTURE][resource_index]) {
-			device.waitForFences(compute_fence, VK_TRUE, umax);
-			device.resetFences(compute_fence);
-			computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_TEXTURE][resource_index] = false; // reset
-		}
+	//vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eComputeShader };
+	vk::SubmitInfo submit{};
+	submit.waitSemaphoreCount = 0;
+	submit.pWaitSemaphores = nullptr;				// **waiting on nothing
+	submit.pWaitDstStageMask = nullptr;
+	submit.commandBufferCount = 1;
+	submit.pCommandBuffers = &compute_process[eComputeBuffers::COMPUTE_TEXTURE];				// submitting compute cb
+	submit.signalSemaphoreCount = 1;
+	submit.pSignalSemaphores = &ctexSema;			// signalling compute cb completion
 
-		gpu_compute(std::forward<compute_pass&& __restrict>({ compute_process[eComputeBuffers::TRANSFER], compute_process[eComputeBuffers::TRANSFER_LIGHT], compute_process[eComputeBuffers::COMPUTE_LIGHT], compute_process[eComputeBuffers::COMPUTE_TEXTURE], resource_index }));    // compute part resets the dirty state that transfer set
+	computeQueue_[!resource_index].submit(1, &submit, compute_fence); // always use "other" compute queue so they potentially can be running independently and in parallel
 
-		//vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eComputeShader };
-		vk::SubmitInfo submit{};
-		submit.waitSemaphoreCount = 0;
-		submit.pWaitSemaphores = nullptr;				// **waiting on nothing
-		submit.pWaitDstStageMask = nullptr;
-		submit.commandBufferCount = 1;
-		submit.pCommandBuffers = &compute_process[eComputeBuffers::COMPUTE_TEXTURE];				// submitting compute cb
-		submit.signalSemaphoreCount = 1;
-		submit.pSignalSemaphores = &ctexSema;			// signalling compute cb completion
-
-		computeQueue_[!resource_index].submit(1, &submit, compute_fence); // always use "other" compute queue so they potentially can be running independently and in parallel
-
-		computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_TEXTURE][resource_index] = true;
-		}*/
+	computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_TEXTURE][resource_index] = true;
+	}*/
 
 	// upload & compute
 	// 	   |
 	// 	graphics
-	  
+
 	//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%//
 	// ANY WORK THAT CAN BE DONE (COMPUTE, TRANSFERS, ANYTHING THAT DOES NOT DEPEND ON IMAGEINDEX) SHOULD BE DONE ABOVE //
 	//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%//

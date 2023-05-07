@@ -495,7 +495,7 @@ public:
 #ifndef NDEBUG
 		
 #if defined(SYNC_VALIDATION_ONLY) && SYNC_VALIDATION_ONLY
-	//layer("VK_LAYER_KHRONOS_synchronization2");
+	layer("VK_LAYER_KHRONOS_synchronization2");
 #else
 	layer("VK_LAYER_LUNARG_standard_validation");
 	layer("VK_LAYER_LUNARG_assistant_layer");
