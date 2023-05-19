@@ -1532,7 +1532,7 @@ public:
 	  using pfb = vk::MemoryPropertyFlagBits;
 
 	  if (0 == maxsizebytes()) { // only allocate once
-		  *this = vku::GenericBuffer(bits | buf::eTransferDst, maxsize); // device local, gpu only buffer - here default params get a device allocated buffer (gpu), with *no* mapping capability - can be initialized or set at any time with a staging buffer and upload to this buffer only.
+		  *this = vku::GenericBuffer(bits | buf::eTransferDst, maxsize, vk::MemoryPropertyFlagBits::eDeviceLocal, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE); // device local, gpu only buffer - here default params get a device allocated buffer (gpu), with *no* mapping capability - can be initialized or set at any time with a staging buffer and upload to this buffer only.
 		  activesizebytes_ = maxsizebytes();
 
 		  // upload temporary staging buffer to clear
