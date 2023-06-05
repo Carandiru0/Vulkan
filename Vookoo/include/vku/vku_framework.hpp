@@ -2764,6 +2764,45 @@ public:
 	vk::Semaphore const tcSema[2]{ *semaphores[resource_index].transferCompleteSemaphore_[0], *semaphores[resource_index].transferCompleteSemaphore_[1] };
 	vk::Semaphore const cSema{ *semaphores[resource_index].computeCompleteSemaphore_ };
 
+	bool async_compute_enabled(true); // *bugfix - limiting lighting updates to 33ms, 16ms introduces visible "light lag" - it must be run every frame for low-latency light changes in sync with everything else.
+
+	//----// UPLOAD (LIGHT) // // **waiting on nothing
+	{ // [transfer]
+
+		vk::Fence const dma_transfer_fence = computeDrawBuffers_.fence[eComputeBuffers::TRANSFER][resource_index]; // only one fence is required for the submission of TRANSFER and TRANSFER_LIGHT command buffers.
+		if (computeDrawBuffers_.queued[eComputeBuffers::TRANSFER][resource_index]) {
+			device.waitForFences(dma_transfer_fence, VK_TRUE, umax);			// protect
+			computeDrawBuffers_.queued[eComputeBuffers::TRANSFER][resource_index] = false; // reset
+		}
+		device.resetFences(dma_transfer_fence);
+		computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = false; // reset
+
+		vk::CommandBuffer const compute_uploads[3] = { *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER][resource_index], *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER_LIGHT][resource_index], nullptr };
+
+		// upload light
+		async_compute_enabled = gpu_compute(std::forward<compute_pass && __restrict>({ compute_uploads[eComputeBuffers::TRANSFER], compute_uploads[eComputeBuffers::TRANSFER_LIGHT], compute_uploads[eComputeBuffers::COMPUTE_LIGHT], resource_index, transferQueueFamilyIndex(), computeQueueFamilyIndex(), graphicsQueueFamilyIndex(), async_compute_enabled }));
+		// bugfix always submits upload due to ubo cb, but upload light and subsequent compute update are totally optional. the last volume(s) generated will be used for this frame if async compute is disabled for this frame.
+
+		// COMPUTE DMA TRANSFER SUBMIT //
+		{
+			vk::SubmitInfo submit{};
+			submit.waitSemaphoreCount = 0;
+			submit.pWaitSemaphores = nullptr;			// **waiting on nothing
+			submit.pWaitDstStageMask = nullptr;
+			submit.commandBufferCount = 1 + (uint32_t)async_compute_enabled;				// submitting dma cb(s) [always transfer] [optional transfer light]
+			submit.pCommandBuffers = &compute_uploads[eComputeBuffers::TRANSFER];
+			submit.signalSemaphoreCount = (uint32_t)async_compute_enabled;
+			submit.pSignalSemaphores = &tcSema[0];		// signal for compute
+
+			transferQueue_[!resource_index].submit(1, &submit, dma_transfer_fence); // *other* transfer queue
+
+			computeDrawBuffers_.queued[eComputeBuffers::TRANSFER][resource_index] = true;
+
+			//--------------// COMPUTE SUBMIT (LIGHT) // // **waiting on upload light
+			computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = async_compute_enabled;
+		}
+	}
+
 	vk::Fence const overlay_dynamic_fence[2]{ overlayDrawBuffers_.fence[eOverlayBuffers::TRANSFER][resource_index], dynamicDrawBuffers_.fence[0][resource_index] };   // bugfix: now properly double-buffered, no longer serializes frame by having 0 here instead of resource_index!
 
 	//----// UPLOAD & OVERLAY // // **waiting on nothing
@@ -2796,46 +2835,8 @@ public:
 		transferQueue_[resource_index].submit(1, &submit, overlay_dynamic_fence[1]); // *main* transfer queue
 	}
 
-	bool async_compute_enabled(true); // *bugfix - limiting lighting updates to 33ms, 16ms introduces visible "light lag" - it must be run every frame for low-latency light changes in sync with everything else.
-	
-	{ // [transfer & compute]
+	{ // [compute]
 
-		//----// UPLOAD (LIGHT) // // **waiting on nothing
-		{ // [transfer]
-			
-			vk::Fence const dma_transfer_fence = computeDrawBuffers_.fence[eComputeBuffers::TRANSFER][resource_index]; // only one fence is required for the submission of TRANSFER and TRANSFER_LIGHT command buffers.
-			if (computeDrawBuffers_.queued[eComputeBuffers::TRANSFER][resource_index]) {
-				device.waitForFences(dma_transfer_fence, VK_TRUE, umax);			// protect
-				computeDrawBuffers_.queued[eComputeBuffers::TRANSFER][resource_index] = false; // reset
-			}
-			device.resetFences(dma_transfer_fence);
-			computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = false; // reset
-
-			vk::CommandBuffer const compute_uploads[3] = { *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER][resource_index], *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER_LIGHT][resource_index], nullptr };
-
-			// upload light
-			async_compute_enabled = gpu_compute(std::forward<compute_pass&& __restrict>({ compute_uploads[eComputeBuffers::TRANSFER], compute_uploads[eComputeBuffers::TRANSFER_LIGHT], compute_uploads[eComputeBuffers::COMPUTE_LIGHT], resource_index, transferQueueFamilyIndex(), computeQueueFamilyIndex(), graphicsQueueFamilyIndex(), async_compute_enabled }));
-			// bugfix always submits upload due to ubo cb, but upload light and subsequent compute update are totally optional. the last volume(s) generated will be used for this frame if async compute is disabled for this frame.
-			
-			// COMPUTE DMA TRANSFER SUBMIT //
-			{
-				vk::SubmitInfo submit{};
-				submit.waitSemaphoreCount = 0;
-				submit.pWaitSemaphores = nullptr;			// **waiting on nothing
-				submit.pWaitDstStageMask = nullptr;
-				submit.commandBufferCount = 1 + (uint32_t)async_compute_enabled;				// submitting dma cb(s) [always transfer] [optional transfer light]
-				submit.pCommandBuffers = &compute_uploads[eComputeBuffers::TRANSFER];
-				submit.signalSemaphoreCount = (uint32_t)async_compute_enabled;
-				submit.pSignalSemaphores = &tcSema[0];		// signal for compute
-
-				transferQueue_[!resource_index].submit(1, &submit, dma_transfer_fence); // *other* transfer queue
-
-				computeDrawBuffers_.queued[eComputeBuffers::TRANSFER][resource_index] = true;
-
-				//--------------// COMPUTE SUBMIT (LIGHT) // // **waiting on upload light
-				computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = async_compute_enabled;
-			}
-		}
 		[[likely]] if (async_compute_enabled) { // [compute]
 			
 			vk::CommandBuffer const compute_process[3] = { nullptr, nullptr, *computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_LIGHT][resource_index] };
