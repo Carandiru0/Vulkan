@@ -159,11 +159,8 @@ namespace vku {
 		// [[deprecated]] vk::CommandBuffer cb_render_texture;
 		
 		uint32_t		  resource_index;
-		uint32_t		  transferQueueFamilyIndex,
-						  computeQueueFamilyIndex,
+		uint32_t		  computeQueueFamilyIndex,
 						  graphicsQueueFamilyIndex;
-		
-		bool			  async_compute_enabled;
 
 	} compute_pass;
 	typedef bool const (*const compute_function)(compute_pass&& __restrict);
