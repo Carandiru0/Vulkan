@@ -153,13 +153,13 @@ namespace vku {
 	typedef void const(* const execute_function)(vk::CommandBuffer&& __restrict);
 
 	typedef struct {
-		vk::CommandBuffer cb_transfer;
 		vk::CommandBuffer cb_transfer_light;
 		vk::CommandBuffer cb_render_light;
 		// [[deprecated]] vk::CommandBuffer cb_render_texture;
 		
 		uint32_t		  resource_index;
-		uint32_t		  computeQueueFamilyIndex,
+		uint32_t		  transferQueueFamilyIndex,
+			              computeQueueFamilyIndex,
 						  graphicsQueueFamilyIndex;
 
 	} compute_pass;
