@@ -2329,11 +2329,13 @@ public:
 	  { // static
 		  uint32_t const resource_count((uint32_t)double_buffer_count);
 		  vk::CommandBufferAllocateInfo const cbai{ *commandPool_[eCommandPools::DEFAULT_POOL], vk::CommandBufferLevel::ePrimary, resource_count };
-		  staticDrawBuffers_.allocate(device, cbai);
-		 
+		  staticDrawBuffers_[0].allocate(device, cbai);
+		  staticDrawBuffers_[1].allocate(device, cbai);
+
 		  for (uint32_t resource_index = 0; resource_index < resource_count; ++resource_index) {
 			  staticCommandsDirty_[resource_index] = false;
-			  VKU_SET_OBJECT_NAME(vk::ObjectType::eCommandBuffer, (VkCommandBuffer)*staticDrawBuffers_.cb[0][resource_index], vkNames::CommandBuffer::STATIC);
+			  VKU_SET_OBJECT_NAME(vk::ObjectType::eCommandBuffer, (VkCommandBuffer)*staticDrawBuffers_[0].cb[0][resource_index], vkNames::CommandBuffer::PRE_STATIC);
+			  VKU_SET_OBJECT_NAME(vk::ObjectType::eCommandBuffer, (VkCommandBuffer)*staticDrawBuffers_[1].cb[0][resource_index], vkNames::CommandBuffer::STATIC);
 		  }
 	  }
 
@@ -2453,21 +2455,20 @@ public:
     cb.end();
   }
 
+  constinit static inline pre_static_renderpass_function_unconst prestaticCommandCache{};
   constinit static inline static_renderpass_function_unconst staticCommandCache{};
 
   /// Build a static draw buffer. This will be rendered after any dynamic content generated in draw()
-  void setStaticCommands(static_renderpass_function static_function, bool const async_compute_enabled, int32_t const iImageIndex = -1) {
+  void setStaticCommands(pre_static_renderpass_function pre_static_function, bool const async_compute_enabled, int32_t const iImageIndex = -1) { // pre-static only
 
 	  // alpha channel ust atleast be cleared to 1 for transparency "clear masks"
 	  // it is faster to clear all channels to 1 or 0
 	  constinit static vk::ClearValue const clearArray_zPass[] = { vk::ClearDepthStencilValue{1.0f, 0}, {}, {} };                  // note: no longer requires opaque alpha for clearmasks
 	  constinit static vk::ClearValue const clearArray_gPass[] = { {}, vk::ClearColorValue{ std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}}, vk::ClearColorValue{ std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}}, vk::ClearColorValue{ std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}}, {}, {} };
-	  constinit static vk::ClearValue const clear_offscreenPass{ vk::ClearColorValue{ std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}} };  
-	  
-	  point2D const frameBufferSz(width_, height_);
-	  point2D_t const downResFrameBufferSz(vku::getDownResolution(frameBufferSz));
 
-	  vk::RenderPassBeginInfo rpbi[7];
+	  point2D const frameBufferSz(width_, height_);
+
+	  vk::RenderPassBeginInfo rpbi[2];
 
 	  rpbi[eFrameBuffers::DEPTH].renderPass = *zPass_;
 	  rpbi[eFrameBuffers::DEPTH].renderArea = vk::Rect2D{ {0, 0}, {width_, height_} };
@@ -2478,6 +2479,44 @@ public:
 	  rpbi[eFrameBuffers::GBUFFER].renderArea = vk::Rect2D{ {0, 0}, {width_, height_} };
 	  rpbi[eFrameBuffers::GBUFFER].clearValueCount = (uint32_t)_countof(clearArray_gPass);
 	  rpbi[eFrameBuffers::GBUFFER].pClearValues = clearArray_gPass;
+
+	  if (iImageIndex < 0) { // both resource of double buffer have command buffers set
+		  for (uint32_t image_index = 0; image_index != staticDrawBuffers_[0].size(); ++image_index) {
+			  vk::CommandBuffer const cb = *staticDrawBuffers_[0].cb[0][image_index];
+			  rpbi[eFrameBuffers::DEPTH].framebuffer			= *framebuffers_[eFrameBuffers::DEPTH][image_index];
+			  rpbi[eFrameBuffers::GBUFFER].framebuffer          = *framebuffers_[eFrameBuffers::GBUFFER][image_index];
+
+			  pre_static_function(std::forward<pre_static_renderpass&& __restrict>({ cb, image_index, async_compute_enabled,
+				  std::move(rpbi[eFrameBuffers::DEPTH]),
+				  std::move(rpbi[eFrameBuffers::GBUFFER]),
+			  }));
+		  }
+
+		  prestaticCommandCache = pre_static_function;
+	  }
+	  else { // only the target resource of the double buffer has the command buffer set
+		  { // pre
+			  vk::CommandBuffer const cb = *staticDrawBuffers_[0].cb[0][iImageIndex];
+			  rpbi[eFrameBuffers::DEPTH].framebuffer = *framebuffers_[eFrameBuffers::DEPTH][iImageIndex];
+			  rpbi[eFrameBuffers::GBUFFER].framebuffer = *framebuffers_[eFrameBuffers::GBUFFER][iImageIndex];
+
+			  pre_static_function(std::forward<pre_static_renderpass && __restrict>({ cb, (uint32_t const)iImageIndex, async_compute_enabled,
+				  std::move(rpbi[eFrameBuffers::DEPTH]),
+				  std::move(rpbi[eFrameBuffers::GBUFFER]) }));
+		  }
+	  }
+  }
+
+  void setStaticCommands(static_renderpass_function static_function, bool const async_compute_enabled, int32_t const iImageIndex = -1) { // static only
+
+	  // alpha channel ust atleast be cleared to 1 for transparency "clear masks"
+	  // it is faster to clear all channels to 1 or 0
+	 constinit static vk::ClearValue const clear_offscreenPass{ vk::ClearColorValue{ std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}} };
+
+	  point2D const frameBufferSz(width_, height_);
+	  point2D_t const downResFrameBufferSz(vku::getDownResolution(frameBufferSz));
+
+	  vk::RenderPassBeginInfo rpbi[7]{};
 
 	  rpbi[eFrameBuffers::HALF_COLOR_ONLY].renderPass = *downPass_;
 	  rpbi[eFrameBuffers::HALF_COLOR_ONLY].renderArea = vk::Rect2D{ {0, 0}, {uint32_t(downResFrameBufferSz.x), uint32_t(downResFrameBufferSz.y)} };
@@ -2498,7 +2537,7 @@ public:
 	  rpbi[eFrameBuffers::COLOR_DEPTH].renderArea = vk::Rect2D{ {0, 0}, {width_, height_} };
 	  rpbi[eFrameBuffers::COLOR_DEPTH].clearValueCount = 0;
 	  rpbi[eFrameBuffers::COLOR_DEPTH].pClearValues = nullptr;
-	
+
 	  static constexpr uint32_t const OFFSCREEN_OFFSET(_countof(rpbi) - 1);
 	  rpbi[OFFSCREEN_OFFSET].renderPass = *offscreenPass_;
 	  rpbi[OFFSCREEN_OFFSET].renderArea = vk::Rect2D{ {0, 0}, {width_, height_} };
@@ -2506,50 +2545,45 @@ public:
 	  rpbi[OFFSCREEN_OFFSET].pClearValues = &clear_offscreenPass;
 
 	  if (iImageIndex < 0) { // both resource of double buffer have command buffers set
-		  for (uint32_t image_index = 0; image_index != staticDrawBuffers_.size(); ++image_index) {
-			  vk::CommandBuffer const cb = *staticDrawBuffers_.cb[0][image_index];
-			  rpbi[eFrameBuffers::DEPTH].framebuffer			= *framebuffers_[eFrameBuffers::DEPTH][image_index];
-			  rpbi[eFrameBuffers::GBUFFER].framebuffer          = *framebuffers_[eFrameBuffers::GBUFFER][image_index];
-			  rpbi[eFrameBuffers::HALF_COLOR_ONLY].framebuffer  = *framebuffers_[eFrameBuffers::HALF_COLOR_ONLY][image_index];
-			  rpbi[eFrameBuffers::FULL_COLOR_ONLY].framebuffer  = *framebuffers_[eFrameBuffers::FULL_COLOR_ONLY][image_index];
-			  rpbi[eFrameBuffers::MID_COLOR_DEPTH].framebuffer  = *framebuffers_[eFrameBuffers::MID_COLOR_DEPTH][image_index];
-			  rpbi[eFrameBuffers::COLOR_DEPTH].framebuffer      = *framebuffers_[eFrameBuffers::COLOR_DEPTH][image_index];
-			  rpbi[OFFSCREEN_OFFSET].framebuffer				= *framebuffers_[eFrameBuffers::OFFSCREEN][image_index];
 
-			  static_function(std::forward<static_renderpass&& __restrict>({ cb, image_index, async_compute_enabled,
-				  std::move(rpbi[eFrameBuffers::DEPTH]),
-				  std::move(rpbi[eFrameBuffers::GBUFFER]),
-				  std::move(rpbi[eFrameBuffers::HALF_COLOR_ONLY]), 
-				  std::move(rpbi[eFrameBuffers::FULL_COLOR_ONLY]), 
-				  std::move(rpbi[eFrameBuffers::MID_COLOR_DEPTH]), 
+		  for (uint32_t image_index = 0; image_index != staticDrawBuffers_[1].size(); ++image_index) {
+			  vk::CommandBuffer const cb = *staticDrawBuffers_[1].cb[0][image_index];
+			  rpbi[eFrameBuffers::HALF_COLOR_ONLY].framebuffer = *framebuffers_[eFrameBuffers::HALF_COLOR_ONLY][image_index];
+			  rpbi[eFrameBuffers::FULL_COLOR_ONLY].framebuffer = *framebuffers_[eFrameBuffers::FULL_COLOR_ONLY][image_index];
+			  rpbi[eFrameBuffers::MID_COLOR_DEPTH].framebuffer = *framebuffers_[eFrameBuffers::MID_COLOR_DEPTH][image_index];
+			  rpbi[eFrameBuffers::COLOR_DEPTH].framebuffer = *framebuffers_[eFrameBuffers::COLOR_DEPTH][image_index];
+			  rpbi[OFFSCREEN_OFFSET].framebuffer = *framebuffers_[eFrameBuffers::OFFSCREEN][image_index];
+
+			  static_function(std::forward<static_renderpass && __restrict>({ cb, image_index, async_compute_enabled,
+				  std::move(rpbi[eFrameBuffers::HALF_COLOR_ONLY]),
+				  std::move(rpbi[eFrameBuffers::FULL_COLOR_ONLY]),
+				  std::move(rpbi[eFrameBuffers::MID_COLOR_DEPTH]),
 				  std::move(rpbi[eFrameBuffers::COLOR_DEPTH]),
 				  std::move(rpbi[OFFSCREEN_OFFSET]) }));
 
-			  staticCommandsDirty_[image_index] = false;
+			  staticCommandsDirty_[image_index] = false; // only reset here, not in pre
 		  }
-		  
+
 		  staticCommandCache = static_function;
 	  }
 	  else { // only the target resource of the double buffer has the command buffer set
-		  vk::CommandBuffer const cb = *staticDrawBuffers_.cb[0][iImageIndex];
-		  rpbi[eFrameBuffers::DEPTH].framebuffer			= *framebuffers_[eFrameBuffers::DEPTH][iImageIndex];
-		  rpbi[eFrameBuffers::GBUFFER].framebuffer          = *framebuffers_[eFrameBuffers::GBUFFER][iImageIndex];
-		  rpbi[eFrameBuffers::HALF_COLOR_ONLY].framebuffer  = *framebuffers_[eFrameBuffers::HALF_COLOR_ONLY][iImageIndex];
-		  rpbi[eFrameBuffers::FULL_COLOR_ONLY].framebuffer  = *framebuffers_[eFrameBuffers::FULL_COLOR_ONLY][iImageIndex];
-		  rpbi[eFrameBuffers::MID_COLOR_DEPTH].framebuffer  = *framebuffers_[eFrameBuffers::MID_COLOR_DEPTH][iImageIndex];
-		  rpbi[eFrameBuffers::COLOR_DEPTH].framebuffer      = *framebuffers_[eFrameBuffers::COLOR_DEPTH][iImageIndex];
-		  rpbi[OFFSCREEN_OFFSET].framebuffer				= *framebuffers_[eFrameBuffers::OFFSCREEN][iImageIndex];
+		  { // static
+			  vk::CommandBuffer const cb = *staticDrawBuffers_[1].cb[0][iImageIndex];
+			  rpbi[eFrameBuffers::HALF_COLOR_ONLY].framebuffer = *framebuffers_[eFrameBuffers::HALF_COLOR_ONLY][iImageIndex];
+			  rpbi[eFrameBuffers::FULL_COLOR_ONLY].framebuffer = *framebuffers_[eFrameBuffers::FULL_COLOR_ONLY][iImageIndex];
+			  rpbi[eFrameBuffers::MID_COLOR_DEPTH].framebuffer = *framebuffers_[eFrameBuffers::MID_COLOR_DEPTH][iImageIndex];
+			  rpbi[eFrameBuffers::COLOR_DEPTH].framebuffer = *framebuffers_[eFrameBuffers::COLOR_DEPTH][iImageIndex];
+			  rpbi[OFFSCREEN_OFFSET].framebuffer = *framebuffers_[eFrameBuffers::OFFSCREEN][iImageIndex];
 
-		  static_function(std::forward<static_renderpass&& __restrict>({ cb, (uint32_t const)iImageIndex, async_compute_enabled,
-			  std::move(rpbi[eFrameBuffers::DEPTH]), 
-			  std::move(rpbi[eFrameBuffers::GBUFFER]),
-			  std::move(rpbi[eFrameBuffers::HALF_COLOR_ONLY]), 
-			  std::move(rpbi[eFrameBuffers::FULL_COLOR_ONLY]), 
-			  std::move(rpbi[eFrameBuffers::MID_COLOR_DEPTH]),
-			  std::move(rpbi[eFrameBuffers::COLOR_DEPTH]),
-			  std::move(rpbi[OFFSCREEN_OFFSET]) }));
+			  static_function(std::forward<static_renderpass && __restrict>({ cb, (uint32_t const)iImageIndex, async_compute_enabled,
+				  std::move(rpbi[eFrameBuffers::HALF_COLOR_ONLY]),
+				  std::move(rpbi[eFrameBuffers::FULL_COLOR_ONLY]),
+				  std::move(rpbi[eFrameBuffers::MID_COLOR_DEPTH]),
+				  std::move(rpbi[eFrameBuffers::COLOR_DEPTH]),
+				  std::move(rpbi[OFFSCREEN_OFFSET]) }));
 
-		  staticCommandsDirty_[iImageIndex] = false;
+			  staticCommandsDirty_[iImageIndex] = false; // only reset here, not in pre
+		  }
 	  }
   }
 
@@ -2907,34 +2941,58 @@ public:
 
 	//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%//
 	
-	vk::Semaphore const tccSema[2] = { tcSema[0], cSema};
 	vk::Semaphore const staticSema = *semaphores[imageIndex].staticCompleteSemaphore_;
 	
 	{ // graphics path
 		//----------// STATIC SUBMIT // // **waiting on input acquire, textureshaders, upload & overlay, compute light
 		{
-			vk::Fence const static_fence(staticDrawBuffers_.fence[0][imageIndex]);
+			{
+				vk::Fence const pre_static_fence(staticDrawBuffers_[0].fence[0][imageIndex]);
 
-			device.waitForFences(static_fence, VK_TRUE, umax);
-			if (staticCommandsDirty_[imageIndex]) {
-				setStaticCommands(staticCommandCache, async_compute_enabled, imageIndex);
+				device.waitForFences(pre_static_fence, VK_TRUE, umax);
+				if (staticCommandsDirty_[imageIndex]) {
+					setStaticCommands(prestaticCommandCache, async_compute_enabled, imageIndex);
+				}
+				device.resetFences(pre_static_fence);
+
+				vk::CommandBuffer const cb(*staticDrawBuffers_[0].cb[0][imageIndex]);
+				vk::PipelineStageFlags const waitStages(vk::PipelineStageFlagBits::eVertexInput); // wait at stage data is required
+
+				vk::SubmitInfo submit{};
+				submit.waitSemaphoreCount = 1;
+				submit.pWaitSemaphores = &tcSema[0];		// waiting on dynamic transfer
+				submit.pWaitDstStageMask = &waitStages;
+				submit.commandBufferCount = 1;
+				submit.pCommandBuffers = &cb;				// submitting static cb
+				submit.signalSemaphoreCount = 0;
+				submit.pSignalSemaphores = nullptr;		
+
+				// ########### FRAMES FIRST USAGE OF GRAPHICS QUEUE ################ //
+				graphicsQueue_.submit(1, &submit, pre_static_fence);
 			}
-			device.resetFences(static_fence);
-			
-			vk::CommandBuffer const cb(*staticDrawBuffers_.cb[0][imageIndex]);
-			vk::PipelineStageFlags waitStages[2] = { vk::PipelineStageFlagBits::eVertexInput, vk::PipelineStageFlagBits::eTopOfPipe }; // wait at stage data is required
+			{
+				vk::Fence const static_fence(staticDrawBuffers_[1].fence[0][imageIndex]);
 
-			vk::SubmitInfo submit{};
-			submit.waitSemaphoreCount = 1 + (uint32_t)async_compute_enabled;
-			submit.pWaitSemaphores = tccSema;		// waiting on dynamic transfer & compute processing (both texture and light)
-			submit.pWaitDstStageMask = waitStages;
-			submit.commandBufferCount = 1;
-			submit.pCommandBuffers = &cb;				// submitting static cb
-			submit.signalSemaphoreCount = 1;
-			submit.pSignalSemaphores = &staticSema;		// signalling static cb completion
+				device.waitForFences(static_fence, VK_TRUE, umax);
+				if (staticCommandsDirty_[imageIndex]) {
+					setStaticCommands(staticCommandCache, async_compute_enabled, imageIndex);
+				}
+				device.resetFences(static_fence);
 
-			// ########### FRAMES FIRST USAGE OF GRAPHICS QUEUE ################ //
-			graphicsQueue_.submit(1, &submit, static_fence);
+				vk::CommandBuffer const cb(*staticDrawBuffers_[1].cb[0][imageIndex]);
+				vk::PipelineStageFlags const waitStages(vk::PipelineStageFlagBits::eTopOfPipe); // wait at stage data is required
+
+				vk::SubmitInfo submit{};
+				submit.waitSemaphoreCount = (uint32_t)async_compute_enabled;
+				submit.pWaitSemaphores = &cSema;		// waiting on compute processing (both texture and light)
+				submit.pWaitDstStageMask = &waitStages;
+				submit.commandBufferCount = 1;
+				submit.pCommandBuffers = &cb;				// submitting static cb
+				submit.signalSemaphoreCount = 1;
+				submit.pSignalSemaphores = &staticSema;		// signalling static cb completion
+
+				graphicsQueue_.submit(1, &submit, static_fence);
+			}
 		}
 
 		//	   graphics
@@ -3048,7 +3106,8 @@ public:
 	}
 
 	computeDrawBuffers_.release(device_);
-	staticDrawBuffers_.release(device_);
+	staticDrawBuffers_[0].release(device_);
+	staticDrawBuffers_[1].release(device_);
 	dynamicDrawBuffers_.release(device_);
 	overlayDrawBuffers_.release(device_);
 
@@ -3164,7 +3223,7 @@ private:
 
   vk::UniqueFramebuffer* framebuffers_[eFrameBuffers::_size()]{};
   CommandBufferContainer<eComputeBuffers::_size()> computeDrawBuffers_;	// one for transfer, one for transfering light, one for computing light
-  CommandBufferContainer<1> staticDrawBuffers_;
+  CommandBufferContainer<1> staticDrawBuffers_[2];
   CommandBufferContainer<1> dynamicDrawBuffers_;
   CommandBufferContainer<eOverlayBuffers::_size()> overlayDrawBuffers_;	// one for transfer, one for rendering
   CommandBufferContainer<1> presentDrawBuffers_;

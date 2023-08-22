@@ -172,6 +172,13 @@ namespace vku {
 		
 		vk::RenderPassBeginInfo&& __restrict rpbiZ;
 		vk::RenderPassBeginInfo&& __restrict rpbiG;
+
+	} pre_static_renderpass;
+
+	typedef struct {
+		vk::CommandBuffer cb;
+		uint32_t resource_index;
+		bool async_compute_enabled;
 		vk::RenderPassBeginInfo&& __restrict rpbiHalf;
 		vk::RenderPassBeginInfo&& __restrict rpbiFull;
 		vk::RenderPassBeginInfo&& __restrict rpbiMid;
@@ -179,6 +186,10 @@ namespace vku {
 		vk::RenderPassBeginInfo&& __restrict rpbiOff;
 
 	} static_renderpass;
+
+	typedef void(* const pre_static_renderpass_function)(pre_static_renderpass&& __restrict);
+	typedef void(*pre_static_renderpass_function_unconst)(pre_static_renderpass&& __restrict);
+
 	typedef void(*const static_renderpass_function)(static_renderpass&& __restrict);
 	typedef void(*static_renderpass_function_unconst)(static_renderpass&& __restrict);
 
