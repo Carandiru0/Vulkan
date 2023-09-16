@@ -162,13 +162,13 @@ namespace vku {
 			              computeQueueFamilyIndex,
 						  graphicsQueueFamilyIndex;
 
+		bool              bypass;
 	} compute_pass;
 	typedef bool const (*const compute_function)(compute_pass&& __restrict);
 
 	typedef struct {
 		vk::CommandBuffer cb;
 		uint32_t resource_index;
-		bool async_compute_enabled;
 		
 		vk::RenderPassBeginInfo&& __restrict rpbiZ;
 		vk::RenderPassBeginInfo&& __restrict rpbiG;
@@ -178,7 +178,7 @@ namespace vku {
 	typedef struct {
 		vk::CommandBuffer cb;
 		uint32_t resource_index;
-		bool async_compute_enabled;
+
 		vk::RenderPassBeginInfo&& __restrict rpbiHalf;
 		vk::RenderPassBeginInfo&& __restrict rpbiFull;
 		vk::RenderPassBeginInfo&& __restrict rpbiMid;

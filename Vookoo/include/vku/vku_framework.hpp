@@ -194,7 +194,8 @@ public:
 			}
 			FMT_LOG_OK(GPU_LOG, "Graphics Queue Selected < {:s} {:d} >", vk::to_string(qprop.queueFlags), graphicsQueueFamilyIndex_);
       }
-	  if (searchCompute && ((qprop.queueFlags & searchCompute) == searchCompute) ) {
+	  if (searchCompute && ((qprop.queueFlags & searchCompute) == searchCompute) &&
+		  !((qprop.queueFlags & vk::QueueFlagBits::eGraphics) == vk::QueueFlagBits::eGraphics)) {
 		  computeQueueFamilyIndex_ = qi;
 		  searchCompute = (vk::QueueFlagBits)0; // prevent further search
 		  FMT_LOG_OK(GPU_LOG, "Compute Queue Selected < {:s} {:d} >", vk::to_string(qprop.queueFlags), computeQueueFamilyIndex_);
@@ -573,7 +574,7 @@ private:
 };
 
 								           
-BETTER_ENUM(eCommandPools, uint32_t const, DEFAULT_POOL = 0, OVERLAY_POOL, TRANSIENT_POOL, DMA_TRANSFER_POOL_PRIMARY, DMA_TRANSFER_POOL_SECONDARY, COMPUTE_POOL);
+BETTER_ENUM(eCommandPools, uint32_t const, DEFAULT_POOL = 0, ALT_POOL, TRANSIENT_POOL, DMA_TRANSFER_POOL_PRIMARY, DMA_TRANSFER_POOL_SECONDARY, COMPUTE_POOL);
 BETTER_ENUM(eFrameBuffers, uint32_t const, DEPTH, GBUFFER, HALF_COLOR_ONLY, FULL_COLOR_ONLY, MID_COLOR_DEPTH, COLOR_DEPTH, OVERLAY, POSTAA_0, POSTAA_1, POSTAA_2, PRESENT, CLEAR, OFFSCREEN);
 BETTER_ENUM(eOverlayBuffers, uint32_t const, TRANSFER, RENDER);
 BETTER_ENUM(eComputeBuffers, uint32_t const, TRANSFER_LIGHT, COMPUTE_LIGHT);
@@ -2308,11 +2309,11 @@ public:
 
 	  {
 		  vk::CommandPoolCreateInfo const cpci{ ccbits::eResetCommandBuffer, graphicsQueueFamilyIndex };
-		  commandPool_[eCommandPools::DEFAULT_POOL] = device.createCommandPoolUnique(cpci).value; // only pool that has non-transient command buffers (command buffers that are reused if there are no changes, until there are changes to warrant re-recording the command buffer)
+		  commandPool_[eCommandPools::DEFAULT_POOL] = device.createCommandPoolUnique(cpci).value; // primary pool that has non-transient command buffers (command buffers that are reused if there are no changes, until there are changes to warrant re-recording the command buffer)
 	  }
 	  {
-		  vk::CommandPoolCreateInfo const cpci{ ccbits::eTransient | ccbits::eResetCommandBuffer, graphicsQueueFamilyIndex };
-		  commandPool_[eCommandPools::OVERLAY_POOL] = device.createCommandPoolUnique(cpci).value;
+		  vk::CommandPoolCreateInfo const cpci{ ccbits::eResetCommandBuffer, graphicsQueueFamilyIndex }; // secondar pool "" "" "" non-transient command buffers "" "" """
+		  commandPool_[eCommandPools::ALT_POOL] = device.createCommandPoolUnique(cpci).value;
 	  }
 	  {
 
@@ -2326,15 +2327,23 @@ public:
 	  }
 
 	  // Create draw buffers
+	  
+	  { // pre-static
+		  uint32_t const resource_count((uint32_t)double_buffer_count);
+		  vk::CommandBufferAllocateInfo const cbai{ *commandPool_[eCommandPools::ALT_POOL], vk::CommandBufferLevel::ePrimary, resource_count };
+		  staticDrawBuffers_[0].allocate(device, cbai);
+
+		  for (uint32_t resource_index = 0; resource_index < resource_count; ++resource_index) {
+			  VKU_SET_OBJECT_NAME(vk::ObjectType::eCommandBuffer, (VkCommandBuffer)*staticDrawBuffers_[0].cb[0][resource_index], vkNames::CommandBuffer::PRE_STATIC);
+		  }
+	  }
 	  { // static
 		  uint32_t const resource_count((uint32_t)double_buffer_count);
 		  vk::CommandBufferAllocateInfo const cbai{ *commandPool_[eCommandPools::DEFAULT_POOL], vk::CommandBufferLevel::ePrimary, resource_count };
-		  staticDrawBuffers_[0].allocate(device, cbai);
 		  staticDrawBuffers_[1].allocate(device, cbai);
 
 		  for (uint32_t resource_index = 0; resource_index < resource_count; ++resource_index) {
 			  staticCommandsDirty_[resource_index] = false;
-			  VKU_SET_OBJECT_NAME(vk::ObjectType::eCommandBuffer, (VkCommandBuffer)*staticDrawBuffers_[0].cb[0][resource_index], vkNames::CommandBuffer::PRE_STATIC);
 			  VKU_SET_OBJECT_NAME(vk::ObjectType::eCommandBuffer, (VkCommandBuffer)*staticDrawBuffers_[1].cb[0][resource_index], vkNames::CommandBuffer::STATIC);
 		  }
 	  }
@@ -2355,9 +2364,9 @@ public:
 			  VKU_SET_OBJECT_NAME(vk::ObjectType::eCommandBuffer, (VkCommandBuffer)*presentDrawBuffers_.cb[0][resource_index], vkNames::CommandBuffer::PRESENT);
 		  }
 	  }
-	  {	// clear command buffer is fully static and cannot be changed - no dirty flag (need default pool (non-transient))
+	  {	// clear command buffer is fully static and cannot be changed - no dirty flag (need default/alternate pool (non-transient))
 		  uint32_t const resource_count((uint32_t)max_image_count);
-		  vk::CommandBufferAllocateInfo const cbai{ *commandPool_[eCommandPools::DEFAULT_POOL], vk::CommandBufferLevel::ePrimary, resource_count };
+		  vk::CommandBufferAllocateInfo const cbai{ *commandPool_[eCommandPools::ALT_POOL], vk::CommandBufferLevel::ePrimary, resource_count };
 		  clearDrawBuffers_.allocate(device, cbai);
 		  for (uint32_t resource_index = 0; resource_index < resource_count; ++resource_index) {
 			  VKU_SET_OBJECT_NAME(vk::ObjectType::eCommandBuffer, (VkCommandBuffer)*clearDrawBuffers_.cb[0][resource_index], vkNames::CommandBuffer::CLEAR);
@@ -2366,7 +2375,7 @@ public:
 	
 	  { // overlay render
 		  uint32_t const resource_count((uint32_t)max_image_count);
-		  vk::CommandBufferAllocateInfo const cbai{ *commandPool_[eCommandPools::OVERLAY_POOL], vk::CommandBufferLevel::ePrimary, resource_count };
+		  vk::CommandBufferAllocateInfo const cbai{ *commandPool_[eCommandPools::TRANSIENT_POOL], vk::CommandBufferLevel::ePrimary, resource_count };
 		  overlayDrawBuffers_.allocate<eOverlayBuffers::RENDER>(device, cbai);
 		  for (uint32_t resource_index = 0; resource_index < resource_count; ++resource_index) {
 			  VKU_SET_OBJECT_NAME(vk::ObjectType::eCommandBuffer, (VkCommandBuffer)*overlayDrawBuffers_.cb[eOverlayBuffers::RENDER][resource_index], vkNames::CommandBuffer::OVERLAY_RENDER);
@@ -2459,7 +2468,7 @@ public:
   constinit static inline static_renderpass_function_unconst staticCommandCache{};
 
   /// Build a static draw buffer. This will be rendered after any dynamic content generated in draw()
-  void setStaticCommands(pre_static_renderpass_function pre_static_function, bool const async_compute_enabled, int32_t const iImageIndex = -1) { // pre-static only
+  void setStaticCommands(pre_static_renderpass_function pre_static_function, int32_t const iImageIndex = -1) { // pre-static only
 
 	  // alpha channel ust atleast be cleared to 1 for transparency "clear masks"
 	  // it is faster to clear all channels to 1 or 0
@@ -2486,7 +2495,7 @@ public:
 			  rpbi[eFrameBuffers::DEPTH].framebuffer			= *framebuffers_[eFrameBuffers::DEPTH][image_index];
 			  rpbi[eFrameBuffers::GBUFFER].framebuffer          = *framebuffers_[eFrameBuffers::GBUFFER][image_index];
 
-			  pre_static_function(std::forward<pre_static_renderpass&& __restrict>({ cb, image_index, async_compute_enabled,
+			  pre_static_function(std::forward<pre_static_renderpass&& __restrict>({ cb, image_index,
 				  std::move(rpbi[eFrameBuffers::DEPTH]),
 				  std::move(rpbi[eFrameBuffers::GBUFFER]),
 			  }));
@@ -2500,14 +2509,14 @@ public:
 			  rpbi[eFrameBuffers::DEPTH].framebuffer = *framebuffers_[eFrameBuffers::DEPTH][iImageIndex];
 			  rpbi[eFrameBuffers::GBUFFER].framebuffer = *framebuffers_[eFrameBuffers::GBUFFER][iImageIndex];
 
-			  pre_static_function(std::forward<pre_static_renderpass && __restrict>({ cb, (uint32_t const)iImageIndex, async_compute_enabled,
+			  pre_static_function(std::forward<pre_static_renderpass && __restrict>({ cb, (uint32_t const)iImageIndex,
 				  std::move(rpbi[eFrameBuffers::DEPTH]),
 				  std::move(rpbi[eFrameBuffers::GBUFFER]) }));
 		  }
 	  }
   }
 
-  void setStaticCommands(static_renderpass_function static_function, bool const async_compute_enabled, int32_t const iImageIndex = -1) { // static only
+  void setStaticCommands(static_renderpass_function static_function, int32_t const iImageIndex = -1) { // static only
 
 	  // alpha channel ust atleast be cleared to 1 for transparency "clear masks"
 	  // it is faster to clear all channels to 1 or 0
@@ -2554,7 +2563,7 @@ public:
 			  rpbi[eFrameBuffers::COLOR_DEPTH].framebuffer = *framebuffers_[eFrameBuffers::COLOR_DEPTH][image_index];
 			  rpbi[OFFSCREEN_OFFSET].framebuffer = *framebuffers_[eFrameBuffers::OFFSCREEN][image_index];
 
-			  static_function(std::forward<static_renderpass && __restrict>({ cb, image_index, async_compute_enabled,
+			  static_function(std::forward<static_renderpass && __restrict>({ cb, image_index,
 				  std::move(rpbi[eFrameBuffers::HALF_COLOR_ONLY]),
 				  std::move(rpbi[eFrameBuffers::FULL_COLOR_ONLY]),
 				  std::move(rpbi[eFrameBuffers::MID_COLOR_DEPTH]),
@@ -2575,7 +2584,7 @@ public:
 			  rpbi[eFrameBuffers::COLOR_DEPTH].framebuffer = *framebuffers_[eFrameBuffers::COLOR_DEPTH][iImageIndex];
 			  rpbi[OFFSCREEN_OFFSET].framebuffer = *framebuffers_[eFrameBuffers::OFFSCREEN][iImageIndex];
 
-			  static_function(std::forward<static_renderpass && __restrict>({ cb, (uint32_t const)iImageIndex, async_compute_enabled,
+			  static_function(std::forward<static_renderpass && __restrict>({ cb, (uint32_t const)iImageIndex,
 				  std::move(rpbi[eFrameBuffers::HALF_COLOR_ONLY]),
 				  std::move(rpbi[eFrameBuffers::FULL_COLOR_ONLY]),
 				  std::move(rpbi[eFrameBuffers::MID_COLOR_DEPTH]),
@@ -2706,28 +2715,27 @@ public:
 		  return(true);
       }
 
-	  void presentation(const vk::Device& __restrict device, vk::Semaphore& __restrict ccSema, vk::Semaphore& __restrict iaSema, uint32_t& __restrict imageIndex)
+	  void presentation(vk::Device const& __restrict device, vk::CommandBuffer const& __restrict ob, vk::Fence const& __restrict overlay_fence, vk::Semaphore& __restrict ccSema, vk::Semaphore& __restrict iaSema, uint32_t& __restrict imageIndex)
 	  {
 		  // clears - *bugfix - added command buffer to presentation queue submission, if done after right present there is a long wait for its queue submission (nvidia nsight)
 		  // eaxct same submission parameters so refactored to one queue submission for both command buffers //
 		  {
-			  vk::Fence const cbFence{ presentDrawBuffers_.fence[0][imageIndex] }; // clear cb fence can safetly be omitted/ignored for this queue submission only requires one fence
-			  device.waitForFences(cbFence, VK_TRUE, umax);
-			  device.resetFences(cbFence);				// have to wait on associatted fence, and reset for next iteration
-
-			  vk::CommandBuffer const pb{ *presentDrawBuffers_.cb[0][imageIndex] }; // previously written by setStaticPresentCommands (above)
+			  // *bugfix - queue submissionb reduction
+			  // *included in overlay_fence (fence reduction)
+			  // also ensures proper ordering
+			  vk::CommandBuffer const obpb[2]{ ob, *presentDrawBuffers_.cb[0][imageIndex] }; // previously written by setStaticPresentCommands (above)
 
 			  //----------// PRESENT (POST AA) FINAL SUBMIT // **waiting on nothing
 			  vk::SubmitInfo submit{};
 			  submit.waitSemaphoreCount = 0;
 			  submit.pWaitSemaphores = nullptr;
 			  submit.pWaitDstStageMask = 0;
-			  submit.commandBufferCount = 1;
-			  submit.pCommandBuffers = &pb;				// submitting presents' static cb
+			  submit.commandBufferCount = 2;
+			  submit.pCommandBuffers = obpb;				// submitting presents' static cb
 			  submit.signalSemaphoreCount = 1;
 			  submit.pSignalSemaphores = &ccSema;			// signalling commands complete
 
-			  graphicsQueue_.submit(1, &submit, cbFence);
+			  graphicsQueue_.submit(1, &submit, overlay_fence);
 		  }
 
 		  // ######## Present *currentframe* //
@@ -2768,7 +2776,7 @@ public:
 
   //*bugfix: this is a highly tuned function - do not change - very smooth motion and framerate
   uint32_t const draw(const vk::Device& __restrict device,
-	  compute_function gpu_compute, dynamic_renderpass_function dynamic_function, overlay_renderpass_function overlay_function) {     // returns the "free" resource index to use
+	  compute_function gpu_compute, dynamic_renderpass_function dynamic_function, overlay_renderpass_function overlay_function, size_t const frame_count) {     // returns the "free" resource index to use
 
 	  // [ RENDERGRAPH ]--------------------------------------------------------------------------------------------------------------------------------------------
 	  //  
@@ -2796,10 +2804,8 @@ public:
 	
 	resource_control::stage_resources(resource_index);		// <---- HOT PATH - CPU HOTSPOT //		
 
-	
-	bool async_compute_enabled(true); // *bugfix - limiting lighting updates to 33ms, 16ms introduces visible "light lag" - it must be run every frame for low-latency light changes in sync with everything else.
+	vk::Semaphore const tcSema[2]{ *semaphores[resource_index].transferDynamicCompleteSemaphore_, *semaphores[resource_index].transferLightCompleteSemaphore_ }; // write-only signal-only
 
-	vk::Semaphore const tcSema[2]{ *semaphores[resource_index].transferDynamicCompleteSemaphore_, *semaphores[resource_index].transferLightCompleteSemaphore_ };
 	vk::Fence const overlay_dynamic_fence[2]{ overlayDrawBuffers_.fence[eOverlayBuffers::TRANSFER][resource_index], dynamicDrawBuffers_.fence[0][resource_index] };   // bugfix: now properly double-buffered, no longer serializes frame by having 0 here instead of resource_index!
 
 	//----// UPLOAD & OVERLAY // // **waiting on nothing
@@ -2836,65 +2842,62 @@ public:
 	vk::Semaphore const cSema{ *semaphores[resource_index].computeCompleteSemaphore_ };
 	{ // [compute] // **waiting on nothing
 
-		[[likely]] if (async_compute_enabled) { // [compute]
-			
-			// *bugfix - these two process' (transfer light, compute light) need to be separate in order for the operations to be asynchronous, decoupled and independent
+		// *bugfix - these two process' (transfer light, compute light) need to be separate in order for the operations to be asynchronous, decoupled and independent
 
-			{ // transfer light
+		{ // transfer light
 
-				vk::Fence const transfer_light_fence(computeDrawBuffers_.fence[eComputeBuffers::TRANSFER_LIGHT][resource_index]);
-				if (computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index]) {
-					device.waitForFences(transfer_light_fence, VK_TRUE, umax);
-					computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = false; // reset
-				}
-				device.resetFences(transfer_light_fence);
-
-				constexpr uint32_t const compute_buffer_count = (uint32_t)eComputeBuffers::_size();
-				vk::CommandBuffer const transfer_process[compute_buffer_count]{ *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER_LIGHT][resource_index], nullptr };
-
-				// transfer light
-				gpu_compute(std::forward<compute_pass && __restrict>({ transfer_process[eComputeBuffers::TRANSFER_LIGHT], transfer_process[eComputeBuffers::COMPUTE_LIGHT], resource_index, transferQueueFamilyIndex(), computeQueueFamilyIndex(), graphicsQueueFamilyIndex() }));    // compute part resets the dirty state that transfer set
-
-				vk::SubmitInfo submit{};
-				submit.waitSemaphoreCount = 0;
-				submit.pWaitSemaphores = nullptr;
-				submit.pWaitDstStageMask = nullptr;
-				submit.commandBufferCount = 1;
-				submit.pCommandBuffers = &transfer_process[0];				// submitting compute cb
-				submit.signalSemaphoreCount = 1;
-				submit.pSignalSemaphores = &tcSema[1];			// signalling transfer cb completion
-
-				transferQueue_[!resource_index].submit(1, &submit, transfer_light_fence); // must be other transfer queue, so dynamic transfer can occur simultaneously
-				computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = true;
+			vk::Fence const transfer_light_fence(computeDrawBuffers_.fence[eComputeBuffers::TRANSFER_LIGHT][resource_index]);
+			if (computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index]) {
+				device.waitForFences(transfer_light_fence, VK_TRUE, umax);
+				computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = false; // reset
 			}
+			device.resetFences(transfer_light_fence);
+
+			constexpr uint32_t const compute_buffer_count = (uint32_t)eComputeBuffers::_size();
+			vk::CommandBuffer const transfer_process[compute_buffer_count]{ *computeDrawBuffers_.cb[eComputeBuffers::TRANSFER_LIGHT][resource_index], nullptr };
+
+			// transfer light
+			gpu_compute(std::forward<compute_pass && __restrict>({ transfer_process[eComputeBuffers::TRANSFER_LIGHT], transfer_process[eComputeBuffers::COMPUTE_LIGHT], resource_index, transferQueueFamilyIndex(), computeQueueFamilyIndex(), graphicsQueueFamilyIndex(), false }));    // compute part resets the dirty state that transfer set
+
+			vk::SubmitInfo submit{};
+			submit.waitSemaphoreCount = 0;
+			submit.pWaitSemaphores = nullptr;
+			submit.pWaitDstStageMask = nullptr;
+			submit.commandBufferCount = 1;
+			submit.pCommandBuffers = &transfer_process[0];				// submitting compute cb
+			submit.signalSemaphoreCount = 1;
+			submit.pSignalSemaphores = &tcSema[1];			// signalling transfer cb completion
+
+			transferQueue_[!resource_index].submit(1, &submit, transfer_light_fence); // must be other transfer queue, so dynamic transfer can occur simultaneously
+			computeDrawBuffers_.queued[eComputeBuffers::TRANSFER_LIGHT][resource_index] = true;
+		}
 			
-			{ // compute light
-				vk::Fence const compute_light_fence( computeDrawBuffers_.fence[eComputeBuffers::COMPUTE_LIGHT][resource_index] );
-				if (computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index]) {
-					device.waitForFences(compute_light_fence, VK_TRUE, umax);
-					computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index] = false; // reset
-				}
-				device.resetFences(compute_light_fence);
-
-				constexpr uint32_t const compute_buffer_count = (uint32_t)eComputeBuffers::_size();
-				vk::CommandBuffer const compute_process[compute_buffer_count]{ nullptr, *computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_LIGHT][resource_index] };
-
-				// compute light
-				gpu_compute(std::forward<compute_pass && __restrict>({ compute_process[eComputeBuffers::TRANSFER_LIGHT], compute_process[eComputeBuffers::COMPUTE_LIGHT], resource_index, transferQueueFamilyIndex(), computeQueueFamilyIndex(), graphicsQueueFamilyIndex() }));    // compute part resets the dirty state that transfer set
-
-				vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eComputeShader };
-				vk::SubmitInfo submit{};
-				submit.waitSemaphoreCount = 1;
-				submit.pWaitSemaphores = &tcSema[1];				// waiting on transfer completion 
-				submit.pWaitDstStageMask = &waitStages;
-				submit.commandBufferCount = 1;
-				submit.pCommandBuffers = &compute_process[1];				// submitting compute cb
-				submit.signalSemaphoreCount = 1;
-				submit.pSignalSemaphores = &cSema;			// signalling compute cb completion
-
-				computeQueue_.submit(1, &submit, compute_light_fence); //*bugfix - there is only one compute queue (fixes flickering) two compute queues cause race condition on light probe gpu texture.
-				computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index] = true;
+		{ // compute light
+			vk::Fence const compute_light_fence( computeDrawBuffers_.fence[eComputeBuffers::COMPUTE_LIGHT][resource_index] );
+			if (computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index]) {
+				device.waitForFences(compute_light_fence, VK_TRUE, umax);
+				computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index] = false; // reset
 			}
+			device.resetFences(compute_light_fence);
+
+			constexpr uint32_t const compute_buffer_count = (uint32_t)eComputeBuffers::_size();
+			vk::CommandBuffer const compute_process[compute_buffer_count]{ nullptr, *computeDrawBuffers_.cb[eComputeBuffers::COMPUTE_LIGHT][resource_index] };
+
+			// compute light
+			gpu_compute(std::forward<compute_pass && __restrict>({ compute_process[eComputeBuffers::TRANSFER_LIGHT], compute_process[eComputeBuffers::COMPUTE_LIGHT], resource_index, transferQueueFamilyIndex(), computeQueueFamilyIndex(), graphicsQueueFamilyIndex(), (0 == frame_count)}));    // compute part resets the dirty state that transfer set
+
+			vk::PipelineStageFlags waitStages{ vk::PipelineStageFlagBits::eComputeShader };
+			vk::SubmitInfo submit{};
+			submit.waitSemaphoreCount = 1;
+			submit.pWaitSemaphores = &tcSema[1];				// waiting on transfer completion 
+			submit.pWaitDstStageMask = &waitStages;
+			submit.commandBufferCount = 1;
+			submit.pCommandBuffers = &compute_process[1];				// submitting compute cb
+			submit.signalSemaphoreCount = 1;
+			submit.pSignalSemaphores = &cSema;			// signalling compute cb completion
+
+			computeQueue_.submit(1, &submit, compute_light_fence); //*bugfix - there is only one compute queue (fixes flickering) two compute queues cause race condition on light probe gpu texture.
+			computeDrawBuffers_.queued[eComputeBuffers::COMPUTE_LIGHT][resource_index] = true;
 		}
 	}
 
@@ -2951,7 +2954,7 @@ public:
 
 				device.waitForFences(pre_static_fence, VK_TRUE, umax);
 				if (staticCommandsDirty_[imageIndex]) {
-					setStaticCommands(prestaticCommandCache, async_compute_enabled, imageIndex);
+					setStaticCommands(prestaticCommandCache, imageIndex);
 				}
 				device.resetFences(pre_static_fence);
 
@@ -2975,7 +2978,7 @@ public:
 
 				device.waitForFences(static_fence, VK_TRUE, umax);
 				if (staticCommandsDirty_[imageIndex]) {
-					setStaticCommands(staticCommandCache, async_compute_enabled, imageIndex);
+					setStaticCommands(staticCommandCache, imageIndex);
 				}
 				device.resetFences(static_fence);
 
@@ -2983,7 +2986,7 @@ public:
 				vk::PipelineStageFlags const waitStages(vk::PipelineStageFlagBits::eTopOfPipe); // wait at stage data is required
 
 				vk::SubmitInfo submit{};
-				submit.waitSemaphoreCount = (uint32_t)async_compute_enabled;
+				submit.waitSemaphoreCount = 1;
 				submit.pWaitSemaphores = &cSema;		// waiting on compute processing (both texture and light)
 				submit.pWaitDstStageMask = &waitStages;
 				submit.commandBufferCount = 1;
@@ -3026,30 +3029,19 @@ public:
 		// **inherent wait between graphics queue operations. they serialize and it is not neccessary to signal a semaphore as there is no inter-queue dependencies.
 
 //----------// OVERLAY SUBMIT // **waiting on overlay upload is not necessary as the wait has already taken place in static. The semaphore combines dynamic upload + overlay upload. Static depends on dynamic uploads completion. Single semaphore. Single signal & wait finished in STATIC.
-		{		
+		{
 			vk::CommandBuffer ob(*overlayDrawBuffers_.cb[eOverlayBuffers::RENDER][imageIndex]);
 
 			// fence not required ....
 			constinit static vk::ClearValue const clearArray[] = { vk::ClearValue{ std::array<uint32_t, 4>{0, 0, 0, 0}}, {} };
 			overlay_function(overlay_renderpass{ nullptr, &ob, imageIndex,
-				std::forward<vk::RenderPassBeginInfo&& __restrict>(vk::RenderPassBeginInfo(*overlayPass_, *framebuffers_[eFrameBuffers::OVERLAY][imageIndex], vk::Rect2D{ {0, 0}, {width_, height_} }, _countof(clearArray), clearArray)) });  // build render cb
-			
-			vk::SubmitInfo submit{};
-			submit.waitSemaphoreCount = 0;
-			submit.pWaitSemaphores = nullptr;			// prior submit already waited on &tcSema[1] (contains semaphor that represents dynamic + overlay transfer)
-			submit.pWaitDstStageMask = nullptr;
-			submit.commandBufferCount = 1;
-			submit.pCommandBuffers = &ob;				// submitting overlay's dynamic cb's
-			submit.signalSemaphoreCount = 0;
-			submit.pSignalSemaphores = nullptr;
+				std::forward<vk::RenderPassBeginInfo && __restrict>(vk::RenderPassBeginInfo(*overlayPass_, *framebuffers_[eFrameBuffers::OVERLAY][imageIndex], vk::Rect2D{ {0, 0}, {width_, height_} }, _countof(clearArray), clearArray)) });  // build render cb
 
-			graphicsQueue_.submit(1, &submit, overlay_dynamic_fence[0]);
+			//	graphics
+			// 	   |
+			// 	graphics
+			presentation(device, ob, overlay_dynamic_fence[0], *commandCompleteSemaphore_[imageIndex], iaSema, imageIndex);
 		}
-
-		//	graphics
-		// 	   |
-		// 	graphics
-		presentation(device, *commandCompleteSemaphore_[imageIndex], iaSema, imageIndex);
 	}
 	// swapping resources
 	resource_index = !resource_index;
